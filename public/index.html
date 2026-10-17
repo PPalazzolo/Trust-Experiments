@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TalentBridge AI — Application</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+
+    <main id="app" class="app">
+      <div class="loading">Loading…</div>
+    </main>
+
+    <!-- Persistent support widget (shown only when the support condition is ON) -->
+    <button id="support-btn" class="support-btn hidden" aria-label="Report a problem or give feedback">
+      <span>?</span>
+    </button>
+    <div id="support-modal" class="modal hidden">
+      <div class="modal-card">
+        <h3 id="support-title">Report a problem or give feedback</h3>
+        <p class="muted">Tell us if something went wrong or didn't feel right.</p>
+        <textarea id="support-text" rows="4" placeholder="Describe the issue or share your feedback…"></textarea>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="support-cancel">Cancel</button>
+          <button class="btn-primary" id="support-send">Send</button>
+        </div>
+        <p id="support-confirm" class="confirm hidden"></p>
+      </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+  </body>
+</html>

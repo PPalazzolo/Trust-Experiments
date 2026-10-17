@@ -1,0 +1,18 @@
+{
+  "name": "trust-hr-study",
+  "version": "1.0.0",
+  "description": "A high-risk HR-tech AI demo platform for running a controlled user-trust study.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "license": "MIT"
+}
