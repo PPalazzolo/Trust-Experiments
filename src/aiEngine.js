@@ -6,12 +6,11 @@
  * hallucinations fully controlled. The server calls generateAssessment() after
  * the applicant submits their answers and returns the result to the client.
  *
- * To swap in a real LLM later, implement an alternative generateAssessment()
- * with the same signature and return shape.
+ * To swap in a real LLM later, implement alternatives to generateAssessment()
+ * and generatePolish() with the same signatures and return shapes.
  *
- * Outcome is held constant (neutral-positive: "advanced to human review") for
- * everyone, per the study design, so trust differences are driven by the
- * manipulations rather than by the decision itself.
+ * The screening outcome (advanced / not_advanced) is a randomized factor; both
+ * outcomes carry the reliability manipulation so the two factors stay crossed.
  */
 
 const { ROLE, OUTCOME } = require("./content");
@@ -92,9 +91,10 @@ function generateAssessment(condition, answers = {}) {
       ...base,
       personalized: true,
       hallucinated: false,
-      bullets: buildHighlights(answers, true),
+      bullets: buildHighlights(answers, true, null, advanced),
       message: lines.join(" "),
       rationale: `This result is based directly on the answers you provided: your stated experience and the strengths you listed.`,
+      nextSteps: buildNextSteps(answers, true, advanced),
     };
   }
 
@@ -115,10 +115,82 @@ function generateAssessment(condition, answers = {}) {
     personalized: false,
     hallucinated: true,
     hallucinationUsed: fake,
-    bullets: buildHighlights(answers, false, fake),
+    bullets: buildHighlights(answers, false, fake, advanced),
     message: lines.join(" "),
     rationale: `This result is based on an overall profile analysis.`,
+    nextSteps: buildNextSteps(answers, false, advanced),
   };
+}
+
+/**
+ * Bridge's rewrite of the applicant's "why I'm a good fit" answer.
+ * High reliability: a faithful rephrasing that adds no new facts.
+ * Low reliability: generic boilerplate that ignores their words and slips in
+ * a hallucinated detail.
+ */
+function generatePolish(condition, answers = {}) {
+  const why = clean(answers.why);
+  const exp = clean(answers.experience);
+  const skills = clean(answers.skills);
+
+  if ((condition.reliability || "high") === "high") {
+    const parts = [`I'd love to join Northwind Retail Group as a ${ROLE}.`];
+    if (why) parts.push(asSentence(why));
+    if (exp && skills) {
+      parts.push(`Drawing on my experience (${exp}) and my strengths in ${skills}, I'm confident I can give every customer a friendly, helpful experience.`);
+    } else if (skills) {
+      parts.push(`Drawing on my strengths in ${skills}, I'm confident I can give every customer a friendly, helpful experience.`);
+    } else if (exp) {
+      parts.push(`Drawing on my experience (${exp}), I'm confident I can give every customer a friendly, helpful experience.`);
+    }
+    return { text: parts.join(" "), hallucinated: false };
+  }
+
+  const fake = pickHallucination(answers);
+  const mine = fake.replace(/^your /, "my ");
+  return {
+    text: `I am a highly motivated, results-driven professional. With ${mine}, I always give 110% and thrive in fast-paced environments. I am a team player who thinks outside the box.`,
+    hallucinated: true,
+    hallucinationUsed: fake,
+  };
+}
+
+function clean(v) {
+  return (v == null ? "" : String(v)).trim().replace(/\s+/g, " ");
+}
+
+function asSentence(s) {
+  const t = s.charAt(0).toUpperCase() + s.slice(1);
+  return /[.!?]$/.test(t) ? t : t + ".";
+}
+
+function firstSkill(answers) {
+  const s = clean(answers.skills).split(/[,;/]| and /)[0].trim().toLowerCase();
+  return s || "communication";
+}
+
+function buildNextSteps(answers, personalized, advanced) {
+  const skill = firstSkill(answers);
+  const exp = clean(answers.experience);
+  const start = clean(answers.start_date);
+  if (advanced) {
+    if (!personalized) {
+      return ["Research the company.", "Prepare answers to common interview questions.", "Dress professionally on the day."];
+    }
+    return [
+      `Prepare a short story about a time your ${skill} helped a customer.`,
+      exp ? `Pick one highlight from your experience (${exp}) to open with.` : `Pick one real customer moment to open with.`,
+      start ? `Be ready to confirm your start date: ${start}.` : `Be ready to talk about when you could start.`,
+    ];
+  }
+  if (!personalized) {
+    return ["Improve your CV.", "Gain more experience.", "Apply again in the future."];
+  }
+  return [
+    `Add a concrete example of your ${skill} in action.`,
+    exp ? `Put numbers on your experience (${exp}) — e.g. customers helped per day.` : `Add numbers to your experience — e.g. customers helped per day.`,
+    `Tailor your "why" to customer service specifically.`,
+  ];
 }
 
 function pickHallucination(answers) {
@@ -140,20 +212,20 @@ function truncate(s, n) {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 
-function buildHighlights(answers, personalized, fake) {
+function buildHighlights(answers, personalized, fake, advanced) {
   if (personalized) {
     const out = [];
     if (answers.experience) out.push(`Experience: ${answers.experience}`);
     if (answers.skills) out.push(`Key strengths: ${answers.skills}`);
     if (answers.start_date) out.push(`Can start: ${answers.start_date}`);
     if (answers.days_per_week) out.push(`Availability: ${answers.days_per_week}`);
-    out.push("Strong match on: customer communication");
+    out.push(advanced ? "Strong match on: customer communication" : "Gap: not enough evidence for the core requirements yet");
     return out;
   }
   return [
-    "Overall profile: meets standard criteria",
+    advanced ? "Overall profile: meets standard criteria" : "Overall profile: below standard criteria",
     fake ? `Noted: ${capitalize(fake)}` : "Noted: relevant background",
-    "General fit: acceptable",
+    advanced ? "General fit: acceptable" : "General fit: limited",
   ];
 }
 
@@ -161,4 +233,4 @@ function capitalize(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-module.exports = { generateAssessment, OUTCOME_SCORE };
+module.exports = { generateAssessment, generatePolish, OUTCOME_SCORE };

@@ -29,7 +29,8 @@ const db = require("./db");
 const { FACTORS, assignConditions, validateCondition } = require("./conditions");
 const { PRE_SURVEY, POST_SURVEY } = require("./survey");
 const content = require("./content");
-const { generateAssessment } = require("./aiEngine");
+const { generateAssessment, generatePolish } = require("./aiEngine");
+const game = require("./game");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -59,6 +60,7 @@ app.get("/api/config", (req, res) => {
       usefulness: content.USEFULNESS,
       outcome: content.OUTCOME,
     },
+    game: { decisions: game.DECISIONS },
   });
 });
 
@@ -111,7 +113,7 @@ app.post("/api/participants/:id/interaction", (req, res) => {
   // The AI always produces a result now; the human-review choice happens AFTER
   // the result (see /human-review below), not before the screening.
   const assessment = generateAssessment(p.condition, answers);
-  const interaction = { answers, assessment, at: new Date().toISOString() };
+  const interaction = Object.assign({}, p.interaction || {}, { answers, assessment, at: new Date().toISOString() });
 
   db.updateStage(p.id, { status: "task_done", interaction });
   db.logEvent(p.id, "assessment_generated", {
@@ -124,18 +126,81 @@ app.post("/api/participants/:id/interaction", (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Record the post-result human-review choice (H2: human-in-the-loop / opt-out).
-// Offered only when the HITL condition is on; this is the applicant choosing to
-// have a human also review the application AFTER seeing the AI result.
+// Game: Bridge's rewrite of the "why I'm a good fit" answer (reliability-driven).
+// Stored server-side so the use_polish decision can be tagged with whether the
+// rewrite contained a hallucination.
 // ---------------------------------------------------------------------------
-app.post("/api/participants/:id/human-review", (req, res) => {
+app.post("/api/participants/:id/polish", (req, res) => {
   const p = db.getParticipant(req.params.id);
   if (!p) return res.status(404).json({ error: "not_found" });
-  const requested = !!(req.body && req.body.requested);
-  const interaction = Object.assign({}, p.interaction || {}, { humanReviewRequested: requested });
-  db.updateStage(p.id, { interaction });
-  db.logEvent(p.id, "human_review_choice", { requested });
+  const answers = (req.body && req.body.answers) || {};
+  const polish = generatePolish(p.condition, answers);
+  db.mutate(p.id, (rec) => {
+    rec.game.polish = polish;
+  });
+  db.logEvent(p.id, "polish_generated", { hallucinated: polish.hallucinated });
+  res.json({ text: polish.text });
+});
+
+// ---------------------------------------------------------------------------
+// Game: record one trust decision. The client never receives points back; the
+// score is only revealed via /game-result at the very end.
+// ---------------------------------------------------------------------------
+app.post("/api/participants/:id/decision", (req, res) => {
+  const p = db.getParticipant(req.params.id);
+  if (!p) return res.status(404).json({ error: "not_found" });
+  const { key, value, trustSide } = req.body || {};
+  const def = game.DECISIONS[key];
+  if (!def) return res.status(400).json({ error: "unknown_decision" });
+  if (!game.isApplicable(def, p.condition)) return res.status(400).json({ error: "not_applicable" });
+  const points = game.pointsFor(def, value);
+  if (points === null) return res.status(400).json({ error: "invalid_value" });
+
+  db.mutate(p.id, (rec) => {
+    const entry = {
+      value,
+      points,
+      trustSide: trustSide === "left" || trustSide === "right" ? trustSide : null,
+      at: new Date().toISOString(),
+    };
+    if (key === "use_polish") entry.hallucinated = !!(rec.game.polish && rec.game.polish.hallucinated);
+    rec.game.decisions[key] = entry;
+    if (key === "accept_result") {
+      rec.interaction = Object.assign({}, rec.interaction || {}, { humanReviewRequested: value === "distrust" });
+    }
+  });
+  db.logEvent(p.id, "game_decision", { key, value, points, trustSide });
   res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Game: non-scored metadata (avatar choice, info cards flipped).
+// ---------------------------------------------------------------------------
+const GAME_META_KEYS = ["avatar", "infoFlips"];
+app.post("/api/participants/:id/game-meta", (req, res) => {
+  const p = db.getParticipant(req.params.id);
+  if (!p) return res.status(404).json({ error: "not_found" });
+  const body = req.body || {};
+  db.mutate(p.id, (rec) => {
+    for (const k of GAME_META_KEYS) {
+      if (body[k] !== undefined) rec.game.meta[k] = typeof body[k] === "number" ? body[k] : String(body[k]).slice(0, 40);
+    }
+  });
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Game: final Trust Score, revealed after the questionnaire.
+// ---------------------------------------------------------------------------
+app.get("/api/participants/:id/game-result", (req, res) => {
+  const p = db.getParticipant(req.params.id);
+  if (!p) return res.status(404).json({ error: "not_found" });
+  const result = game.computeTrustScore(p.game && p.game.decisions);
+  db.mutate(p.id, (rec) => {
+    rec.game.result = result;
+  });
+  db.logEvent(p.id, "game_result_viewed", { score: result.score });
+  res.json(result);
 });
 
 // ---------------------------------------------------------------------------
@@ -177,10 +242,16 @@ function checkAdmin(req, res) {
 
 app.get("/api/admin/participants", (req, res) => {
   if (!checkAdmin(req, res)) return;
-  const all = db.allParticipants();
+  // Attach the computed Trust Score so the dashboard includes players who
+  // finished the game but closed the tab before the final reveal.
+  const all = db.allParticipants().map((p) => ({
+    ...p,
+    game_result: game.computeTrustScore(p.game && p.game.decisions),
+  }));
   res.json({
     count: all.length,
     completed: all.filter((p) => p.status === "completed").length,
+    decisions: game.DECISIONS,
     participants: all,
   });
 });
@@ -277,6 +348,18 @@ function toCSV(participants) {
   }
   const scoreCols = ["score_trustMean"];
 
+  const decisionKeys = Object.keys(game.DECISIONS);
+  const gameCols = [
+    "game_avatar",
+    "game_info_flips",
+    "game_trust_score",
+    "game_trust_raw",
+    "game_trust_max",
+    "game_archetype",
+    ...decisionKeys.flatMap((k) => [`g_${k}`, `g_${k}_points`, `g_${k}_trust_side`]),
+    "g_use_polish_hallucinated",
+  ];
+
   const header = [
     "participant_id",
     "created_at",
@@ -290,6 +373,7 @@ function toCSV(participants) {
     "interaction_hallucinated",
     ...postCols,
     ...scoreCols,
+    ...gameCols,
   ];
 
   const rows = [header.map(csvCell).join(",")];
@@ -300,6 +384,17 @@ function toCSV(participants) {
     const post = (p.post_survey && p.post_survey.answers) || {};
     const scores = (p.post_survey && p.post_survey.scores) || {};
     const inter = p.interaction || {};
+    const g = p.game || { meta: {}, decisions: {} };
+    const gd = g.decisions || {};
+    const gr = game.computeTrustScore(gd);
+
+    // Binary decisions export as 1 (trust) / 0 (held back); tokens as 0–10.
+    const decisionCells = decisionKeys.flatMap((k) => {
+      const d = gd[k];
+      if (!d) return ["", "", ""];
+      const v = game.DECISIONS[k].type === "tokens" ? d.value : d.value === "trust" ? 1 : 0;
+      return [v, d.points, d.trustSide || ""];
+    });
 
     const row = [
       p.id,
@@ -314,6 +409,14 @@ function toCSV(participants) {
       inter.assessment && inter.assessment.hallucinated ? "1" : "0",
       ...postCols.map((c) => post[c.replace(/^post_/, "")] ?? ""),
       scores.trustMean ?? "",
+      (g.meta && g.meta.avatar) || "",
+      (g.meta && g.meta.infoFlips) ?? "",
+      gr.score ?? "",
+      gr.decisionsMade ? gr.raw : "",
+      gr.decisionsMade ? gr.max : "",
+      gr.archetype ? gr.archetype.key : "",
+      ...decisionCells,
+      gd.use_polish ? (gd.use_polish.hallucinated ? 1 : 0) : "",
     ];
     rows.push(row.map(csvCell).join(","));
   }

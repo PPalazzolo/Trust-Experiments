@@ -69,6 +69,7 @@ function createParticipant({ id, condition, userAgent, assignSource }) {
     demographics: null,
     interaction: null,
     post_survey: null,
+    game: { meta: {}, decisions: {} },
     user_agent: userAgent || "",
     assign_source: assignSource || "random",
   };
@@ -88,6 +89,17 @@ function updateStage(id, { status, demographics, interaction, post_survey }) {
   if (demographics !== undefined && demographics !== null) p.demographics = demographics;
   if (interaction !== undefined && interaction !== null) p.interaction = interaction;
   if (post_survey !== undefined && post_survey !== null) p.post_survey = post_survey;
+  p.updated_at = now();
+  persist();
+  return p;
+}
+
+// Apply an in-place change to a participant record and persist it.
+function mutate(id, fn) {
+  const p = participants.get(id);
+  if (!p) return null;
+  if (!p.game) p.game = { meta: {}, decisions: {} };
+  fn(p);
   p.updated_at = now();
   persist();
   return p;
@@ -126,6 +138,7 @@ module.exports = {
   createParticipant,
   getParticipant,
   updateStage,
+  mutate,
   logEvent,
   allParticipants,
   eventsFor,

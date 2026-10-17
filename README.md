@@ -1,6 +1,6 @@
 # TalentBridge AI — HR-Tech Trust Study Platform
 
-A self-contained web app for running a controlled user study on **trust in a high-risk HR-tech AI**. Participants play a job applicant being screened by a simulated AI hiring assistant ("TalentBridge AI") for a **Customer Service Associate** role, then complete a trust questionnaire.
+A self-contained web app for running a controlled user study on **trust in a high-risk HR-tech AI**. Participants play **Job Quest**, a short game in which they apply for a **Customer Service Associate** role guided by *Bridge*, a simulated AI hiring assistant from "TalentBridge AI". Along the way they make choices that reveal how much they trust the AI, see the AI's screening result, and then complete a trust questionnaire.
 
 It is designed to **measure all 13 trust hypotheses** (AI-system, dispositional, and contextual) and to run **cheaply on your personal AWS account** (flat ~$5/mo Lightsail, or ~$0 on an EC2 free-tier box). No live LLM, no managed database — so there are no per-use or per-token costs.
 
@@ -23,7 +23,34 @@ It is designed to **measure all 13 trust hypotheses** (AI-system, dispositional,
 
 **Measured about the participant** (pre-survey): age band (18–45 / 46+) → H9, gender → H10, AI background → H11, and **country** as free text → H13 (the server buckets it into US / UK / EU / Other for analysis via `regionFromCountry`). *Risk tolerance is intentionally out of scope (future work) but there is a clean hook in `src/survey.js` to add it later.*
 
-The screening **outcome is randomized** (`advanced` vs `not_advanced`) so you can measure whether receiving the *preferred* result changes trust in the AI (H14). If a participant opts out of AI screening, they're routed to a human and no AI pass/fail is shown.
+The screening **outcome is randomized** (`advanced` vs `not_advanced`) so you can measure whether receiving the *preferred* result changes trust in the AI (H14). When `hitl` is on, participants reach the **Crossroads** *after* seeing the result and can choose to have a human recruiter review their application.
+
+### The game and the behavioural Trust Score
+
+The levels are: TalentBridge Tower (reputation) → Data Gate (transparency) → Workshop (application) → Confidence Check → Screening Chamber (result) → Crossroads (only when `hitl=on`) → Next Steps → Research Lounge (questionnaire) → Trust Profile.
+
+At each decision point the player swipes a card to either rely on Bridge or hold back. Relying adds points and holding back subtracts them (`src/game.js`):
+
+| Decision | Trusting choice | Points |
+|---|---|---|
+| `share_data` | Let Bridge scan their LinkedIn | ±10 |
+| `use_polish` | Use Bridge's rewrite of their answer (in `reliability=low`, the rewrite contains a made-up claim) | ±10 |
+| `auto_submit` | Let Bridge send the application without reviewing it | ±10 |
+| `confidence_tokens` | 0–10 tokens for "how confident are you I'll judge you fairly" | −10 … +10 |
+| `accept_result` | Accept the AI's result instead of asking for a human (only when `hitl=on`) | ±10 |
+| `follow_plan` | Follow Bridge's interview-prep plan / improvement tips | ±10 |
+| `keep_profile` | Let Bridge keep their profile for future jobs | ±10 |
+
+**Trust Score** = `round((raw + max) / (2 × max) × 100)`, i.e. 0–100 over the decisions the person actually saw, so it stays comparable whether or not the Crossroads appeared. It maps to five non-judgemental profiles (Guardian, Careful Skeptic, Balanced Judge, Open-Minded Explorer, AI Ally).
+
+Design safeguards:
+- The score is **hidden during play** and revealed only **after** the questionnaire, so it can't anchor the survey answers.
+- The questionnaire is hosted by a neutral research host ("Sam"), not by Bridge, to avoid people rating the AI more kindly because the AI is asking.
+- Whether the trusting option appears on the left or right is **randomized per card** and recorded (`g_<key>_trust_side`), so position bias can be checked.
+- Visuals are identical across conditions; only the manipulated content changes.
+
+### Versions
+Each version lives on its own git branch so you can go back at any time: `main` = v1 (form-based), `v2-game` = v2 (light gamification), `v3-quest` = v3 (Job Quest game + Trust Score). Switch with `git checkout <branch>`.
 
 ---
 
@@ -54,8 +81,8 @@ Anything you don't specify is randomized as normal.
 ## 3. Data & analysis
 
 - All data is stored in a single JSON file (`DB_PATH`, default `./data/study.json`), with an append-only `events.jsonl` log beside it. No database server, no native dependencies.
-- The admin dashboard shows live counts, mean trust, and a per-factor trust breakdown.
-- **Download CSV** gives one row per participant with every condition flag, demographic, survey item, and computed trust score — ready for Excel / R / SPSS / Python.
+- The admin dashboard shows live counts, mean survey trust, the average game Trust Score, its distribution across profiles, the % who trusted Bridge at each decision, the correlation between game score and survey trust, and a per-factor breakdown of both.
+- **Download CSV** gives one row per participant with every condition flag, demographic, survey item, and computed trust score — ready for Excel / R / SPSS / Python. Game columns: `game_trust_score`, `game_trust_raw`, `game_trust_max`, `game_archetype`, `game_avatar`, `game_info_flips` (how many data cards they flipped), and per decision `g_<key>` (trust/distrust or tokens), `g_<key>_points`, `g_<key>_trust_side`, plus `g_use_polish_hallucinated`.
 
 ---
 
@@ -129,13 +156,14 @@ src/
   db.js          File-based data layer (participants + event log)
   conditions.js  Factor definitions + randomized assignment
   content.js     All condition copy (reputation/transparency/HITL/etc.)
-  aiEngine.js    Simulated AI assessment + controlled reliability manipulation
+  aiEngine.js    Simulated AI assessment, answer polish + reliability manipulation
+  game.js        Trust decisions, scoring and Trust Profile archetypes
   survey.js      Pre-survey + post-survey items mapped to hypotheses
 public/
   index.html     Participant SPA shell + support widget
   admin.html     Admin dashboard
   css/styles.css
-  js/app.js      Full participant flow
+  js/app.js      Job Quest game (levels, swipe cards, questionnaire, finale)
   js/admin.js    Dashboard logic
 Dockerfile       Container for any AWS target
 ```

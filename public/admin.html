@@ -3,32 +3,42 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Study Admin — TalentBridge AI</title>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <title>Study Admin — Job Quest</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/css/styles.css" />
     <style>
-      .admin { max-width: 1100px; }
+      .admin { max-width: 1160px; }
+      .admin h1 { margin-top: 0; }
+      .admin h3 { margin: 26px 0 6px; }
       table { width: 100%; border-collapse: collapse; font-size: 13px; }
       th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-      th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: #fff; }
-      .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
-      .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin: 16px 0; }
-      .stat { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
-      .stat .n { font-size: 26px; font-weight: 700; }
-      .stat .l { color: var(--muted); font-size: 13px; }
-      .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #eef3ff; color: var(--brand-dark); }
-      .token-row { display:flex; gap:8px; align-items:center; margin-bottom:16px; flex-wrap: wrap; }
-      .token-row input { padding:10px 12px; border:1px solid var(--line); border-radius:9px; font-size:14px; min-width:260px; }
+      th { color: var(--muted); font-weight: 800; position: sticky; top: 0; background: #fff; }
+      .table-wrap { overflow-x: auto; border: 2px solid var(--line); border-radius: 14px; max-height: 520px; }
+      .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 14px 0; }
+      .stat { background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+      .stat .n { font-size: 28px; font-weight: 900; }
+      .stat .l { color: var(--muted); font-size: 13px; font-weight: 700; }
+      .stat.hi { background: linear-gradient(135deg, #eeecff, #ffe9f3); border-color: transparent; }
+      .pill { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--info-bg); color: var(--brand-dark); }
+      .token-row { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+      .token-row input { padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; font-size: 14px; min-width: 260px; font-family: inherit; }
+      .bars { display: grid; gap: 8px; margin: 10px 0; }
+      .bar-row { display: grid; grid-template-columns: 230px 1fr 70px; gap: 10px; align-items: center; font-size: 14px; font-weight: 700; }
+      .bar { height: 16px; border-radius: 999px; background: #f0eefb; overflow: hidden; }
+      .bar > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--brand), var(--pink)); }
+      .bar-row .v { text-align: right; color: var(--muted); }
+      .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+      .score-chip { display: inline-block; min-width: 34px; text-align: center; font-weight: 900; padding: 2px 8px; border-radius: 999px; background: var(--info-bg); color: var(--brand-dark); }
+      @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } .bar-row { grid-template-columns: 140px 1fr 60px; } }
     </style>
   </head>
   <body>
     <main id="app" class="app admin">
       <div class="card">
-        <h1>Study admin</h1>
-        <p class="muted">Enter your admin token to view participants and export data.</p>
+        <h1>Study admin 🧪</h1>
+        <p class="muted">Enter your admin token to view participants, Trust Scores and export data.</p>
         <div class="token-row">
           <input type="password" id="token" placeholder="Admin token" />
           <button class="btn-primary" id="load">Load</button>
@@ -36,7 +46,9 @@
         </div>
         <div id="status" class="muted small"></div>
         <div id="stats"></div>
+        <div id="game"></div>
         <div id="breakdown"></div>
+        <h3>Participants</h3>
         <div class="table-wrap"><table id="tbl"></table></div>
       </div>
     </main>
