@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Care Quest — powered by CareCompass AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/styles.css" />
+    <link rel="stylesheet" href="/health/css/health.css" />
+  </head>
+  <body class="world care">
+    <!-- Quest map: the player's avatar walks from level to level -->
+    <header id="quest-map" class="quest-map hidden" aria-label="Your quest progress">
+      <div class="map-inner">
+        <div class="map-track" id="map-track"></div>
+        <div class="map-avatar" id="map-avatar" aria-hidden="true"></div>
+      </div>
+    </header>
+
+    <main id="app" class="app">
+      <div class="loading">Loading…</div>
+    </main>
+
+    <div class="sim-badge" aria-hidden="true">🎭 Simulation · not medical advice</div>
+
+    <!-- Persistent support widget (shown only when the support condition is ON) -->
+    <button id="support-btn" class="support-btn hidden" aria-label="Help and feedback">
+      <span>Help &amp; feedback</span>
+    </button>
+    <div id="support-tip" class="support-tip hidden" role="status">
+      <button class="x" id="support-tip-close" aria-label="Dismiss">×</button>
+      Need help or want to give feedback? Click here any time 👇
+    </div>
+    <div id="support-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="support-title">
+      <div class="modal-card">
+        <h3 id="support-title">💬 Help &amp; feedback</h3>
+        <p class="muted">Tell us if something isn't working, if you have a question, or what you think of the AI.</p>
+        <div class="support-cats" id="support-cats">
+          <button type="button" class="chip" data-cat="problem">🛠️ Something isn't working</button>
+          <button type="button" class="chip" data-cat="question">❓ I have a question</button>
+          <button type="button" class="chip" data-cat="feedback">💭 Feedback about the AI</button>
+        </div>
+        <textarea id="support-text" rows="4" placeholder="Describe the issue or share your feedback…"></textarea>
+        <p id="support-hint" class="error-text hidden">Pick a topic or write a short message first.</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="support-cancel">Cancel</button>
+          <button class="btn-primary" id="support-send">Send</button>
+        </div>
+        <p id="support-confirm" class="confirm hidden"></p>
+      </div>
+    </div>
+
+    <script src="/health/js/app.js"></script>
+  </body>
+</html>

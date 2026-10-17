@@ -30,6 +30,8 @@
       .bar > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--brand), var(--pink)); }
       .bar-row .v { text-align: right; color: var(--muted); }
       .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+      .study-nav { font-size: 14px; font-weight: 800; margin: -4px 0 10px; }
+      .study-nav a { color: var(--brand-dark); }
       .score-chip { display: inline-block; min-width: 34px; text-align: center; font-weight: 900; padding: 2px 8px; border-radius: 999px; background: var(--info-bg); color: var(--brand-dark); }
       @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } .bar-row { grid-template-columns: 140px 1fr 60px; } }
     </style>
@@ -37,7 +39,8 @@
   <body>
     <main id="app" class="app admin">
       <div class="card">
-        <h1>Study admin 🧪</h1>
+        <h1>Job Quest admin 🧪</h1>
+        <div class="study-nav">HR study · <a href="/health/admin">Switch to Care Quest (healthcare) ›</a></div>
         <p class="muted">Enter your admin token to view participants, Trust Scores and export data.</p>
         <div class="token-row">
           <input type="password" id="token" placeholder="Admin token" />

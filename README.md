@@ -1,6 +1,11 @@
-# TalentBridge AI — HR-Tech Trust Study Platform
+# AI Trust Study Platform — Job Quest (HR) & Care Quest (healthcare)
 
-A self-contained web app for running a controlled user study on **trust in a high-risk HR-tech AI**. Participants play **Job Quest**, a short game in which they apply for a **Customer Service Associate** role guided by *Bridge*, a simulated AI hiring assistant from "TalentBridge AI". Along the way they make choices that reveal how much they trust the AI, see the AI's screening result, and then complete a trust questionnaire.
+A self-contained web app for running controlled user studies on **trust in high-risk AI**. It hosts two studies built on the same engine, so results can be compared across domains:
+
+- **Job Quest** (HR tech, at `/`): participants apply for a **Customer Service Associate** role guided by *Bridge*, a simulated AI hiring assistant from "TalentBridge AI".
+- **Care Quest** (healthcare, at `/health`): participants play a patient with headaches and use *Remi*, a simulated AI symptom checker from "CareCompass AI", to decide whether to see a doctor today or look after themselves at home. See [Care Quest](#care-quest-healthcare) below.
+
+In both, participants make choices that reveal how much they trust the AI, see the AI's result, and then complete a trust questionnaire.
 
 It is designed to **measure all 13 trust hypotheses** (AI-system, dispositional, and contextual) and to run **cheaply on your personal AWS account** (flat ~$5/mo Lightsail, or ~$0 on an EC2 free-tier box). No live LLM, no managed database — so there are no per-use or per-token costs.
 
@@ -49,8 +54,21 @@ Design safeguards:
 - Whether the trusting option appears on the left or right is **randomized per card** and recorded (`g_<key>_trust_side`), so position bias can be checked.
 - Visuals are identical across conditions; only the manipulated content changes.
 
+### Care Quest (healthcare)
+
+Same factors, decisions, weights, scoring, archetypes and questionnaire item IDs as Job Quest, so the Trust Score and survey scales mean the same thing in both studies. What changes:
+
+- **Scenario:** everyone gets the same scenario card (a dull headache on most days for two weeks, painkillers help a little, no warning signs) and describes it **in their own words**. No real health information is collected, and a "Simulation · not medical advice" badge is shown on every screen.
+- **Outcome factor (H14):** `outcome` = `see_doctor` / `self_care`. Neither is styled as good or bad news. Just before the advice, Remi asks **"What are you hoping I'll say?"** (see a doctor / look after myself / don't mind; the first two in random order), so the CSV records `interaction_hope` and `interaction_outcome_matches_hope` (1 / 0 / blank for no preference) per participant.
+- **Decisions:** connect health records & fitness tracker (simulated patient-portal sign-in), use Remi's summary for the doctor's notes, let Remi send it to the clinic, confidence tokens ("safe and accurate advice"), nurse callback instead of accepting the advice (`hitl=on`), book the appointment / follow the self-care plan, keep health data.
+- **Reliability (H7):** high = Remi echoes exactly what the person said; low = generic "Hello Patient" advice plus one made-up fact about their history (e.g. "your history of migraines"). The made-up facts are never warning signs, so self-care advice never looks dangerous, and they're never something the person actually mentioned.
+- **Safety:** "When to get urgent help" (emergency numbers and red-flag symptoms) is always shown, whatever the advice; the debrief repeats that the advice was random and not medical advice.
+- **Extra items:** pre-survey `health_lookup` (how often they look up health symptoms online); post-survey `int_follow` (would follow this AI's advice).
+
+Force conditions the same way, e.g. `http://localhost:3000/health?reliability=low&outcome=self_care`. Admin: `/health/admin` (same token). Data goes to its own files (`HEALTH_DB_PATH`, default `care-study.json` beside `DB_PATH`, plus `care-events.jsonl`).
+
 ### Versions
-Each version lives on its own git branch so you can go back at any time: `main` = v1 (form-based), `v2-game` = v2 (light gamification), `v3-quest` = v3 (Job Quest game + Trust Score). Switch with `git checkout <branch>`.
+Each version lives on its own git branch so you can go back at any time: `main` = v1 (form-based), `v2-game` = v2 (light gamification), `v3-quest` = v3 (Job Quest game + Trust Score), `care-quest` = Job Quest + Care Quest (healthcare). Switch with `git checkout <branch>`.
 
 ---
 
@@ -64,8 +82,8 @@ cp .env.example .env        # then edit ADMIN_TOKEN
 npm start
 ```
 
-- Participant app: <http://localhost:3000/>
-- Admin dashboard: <http://localhost:3000/admin> (enter your `ADMIN_TOKEN`)
+- Job Quest: <http://localhost:3000/> · admin <http://localhost:3000/admin> (enter your `ADMIN_TOKEN`)
+- Care Quest: <http://localhost:3000/health> · admin <http://localhost:3000/health/admin>
 
 ### Forcing conditions (for moderated sessions / testing)
 Append factor values as query params, e.g. to force the "worst" trust condition:
@@ -152,19 +170,22 @@ A new AWS account gets 750 hours/month of a free micro instance for 12 months. Y
 
 ```
 src/
-  server.js      Express app: API, admin, CSV export, static hosting
-  db.js          File-based data layer (participants + event log)
+  server.js      Express app: mounts both studies, pages, static hosting
+  studyApi.js    Per-study API router: participants, decisions, admin, CSV export
+  db.js          File-based data layer (participants + event log), one store per study
   conditions.js  Factor definitions + randomized assignment
   content.js     All condition copy (reputation/transparency/HITL/etc.)
   aiEngine.js    Simulated AI assessment, answer polish + reliability manipulation
   game.js        Trust decisions, scoring and Trust Profile archetypes
   survey.js      Pre-survey + post-survey items mapped to hypotheses
+  health/        Care Quest versions of conditions, content, aiEngine, game, survey
 public/
-  index.html     Participant SPA shell + support widget
-  admin.html     Admin dashboard
-  css/styles.css
+  index.html     Job Quest SPA shell + support widget
+  admin.html     Job Quest admin dashboard
+  css/styles.css Shared game styles
   js/app.js      Job Quest game (levels, swipe cards, questionnaire, finale)
-  js/admin.js    Dashboard logic
+  js/admin.js    Dashboard logic (shared; health/admin.html points it at /api/health)
+  health/        Care Quest page, teal theme (css/health.css), game (js/app.js), admin
 Dockerfile       Container for any AWS target
 ```
 

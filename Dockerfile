@@ -1,4 +1,4 @@
-# ---- TalentBridge AI study platform ----
+# ---- AI trust study platform (Job Quest + Care Quest) ----
 # Small, single-stage image. The app has no native dependencies (file-based
 # store + Express), so no compiler toolchain is needed and the image is tiny.
 FROM node:20-slim

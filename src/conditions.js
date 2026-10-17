@@ -89,32 +89,38 @@ function weightedPick(levels, weights) {
 }
 
 /**
- * Assign a full condition set. Independent randomization per factor keeps every
- * manipulation orthogonal, so each hypothesis can be analysed on its own even
- * though we never run the full factorial.
+ * Build assign/validate functions for a factor set (each study has its own).
  *
- * @param {Object} overrides - e.g. { reliability: "low", transparency: "on" }
- *                             from URL params or the admin console.
+ * assignConditions: independent randomization per factor keeps every
+ * manipulation orthogonal, so each hypothesis can be analysed on its own even
+ * though we never run the full factorial. `overrides` (e.g. { reliability:
+ * "low" }) come from URL params or the admin console.
  */
-function assignConditions(overrides = {}) {
-  const condition = {};
-  for (const [factor, def] of Object.entries(FACTORS)) {
-    const override = overrides[factor];
-    if (override && def.levels.includes(override)) {
-      condition[factor] = override;
-    } else {
-      condition[factor] = weightedPick(def.levels, def.weights);
+function makeAssigner(factors) {
+  function assignConditions(overrides = {}) {
+    const condition = {};
+    for (const [factor, def] of Object.entries(factors)) {
+      const override = overrides[factor];
+      if (override && def.levels.includes(override)) {
+        condition[factor] = override;
+      } else {
+        condition[factor] = weightedPick(def.levels, def.weights);
+      }
     }
+    return condition;
   }
-  return condition;
+
+  function validateCondition(condition) {
+    if (!condition || typeof condition !== "object") return false;
+    for (const [factor, def] of Object.entries(factors)) {
+      if (!def.levels.includes(condition[factor])) return false;
+    }
+    return true;
+  }
+
+  return { assignConditions, validateCondition };
 }
 
-function validateCondition(condition) {
-  if (!condition || typeof condition !== "object") return false;
-  for (const [factor, def] of Object.entries(FACTORS)) {
-    if (!def.levels.includes(condition[factor])) return false;
-  }
-  return true;
-}
+const { assignConditions, validateCondition } = makeAssigner(FACTORS);
 
-module.exports = { FACTORS, assignConditions, validateCondition };
+module.exports = { FACTORS, assignConditions, validateCondition, makeAssigner };

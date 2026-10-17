@@ -10,25 +10,25 @@
  *                      update (infrequent, so cheap).
  *   - Events        -> an append-only JSONL log (fast, never rewrites).
  *
- * DB_PATH points at the participants file; the events log sits beside it.
- * In Docker/AWS, put DB_PATH on a persistent volume so data survives restarts.
+ * Each study gets its own store (participants file + events log). The default
+ * export is the Job Quest store: DB_PATH points at its participants file and
+ * events.jsonl sits beside it. In Docker/AWS, put DB_PATH on a persistent
+ * volume so data survives restarts.
  */
 
 const path = require("path");
 const fs = require("fs");
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, "..", "data", "study.json");
-const DATA_DIR = path.dirname(DB_PATH);
-const EVENTS_PATH = path.join(DATA_DIR, "events.jsonl");
-
-fs.mkdirSync(DATA_DIR, { recursive: true });
-
 const now = () => new Date().toISOString();
 
-// In-memory index of participants, keyed by id. Loaded once at startup.
-const participants = new Map();
+function createStore({ dbPath, eventsPath }) {
+  const DB_PATH = dbPath;
+  const EVENTS_PATH = eventsPath || path.join(path.dirname(dbPath), "events.jsonl");
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
-(function load() {
+  // In-memory index of participants, keyed by id. Loaded once at startup.
+  const participants = new Map();
+
   try {
     if (fs.existsSync(DB_PATH)) {
       const raw = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
@@ -39,108 +39,115 @@ const participants = new Map();
   } catch (e) {
     console.error("Warning: could not read existing data file:", e.message);
   }
-})();
 
-let writeQueued = false;
-function persist() {
-  // Debounce multiple synchronous updates into a single atomic write.
-  if (writeQueued) return;
-  writeQueued = true;
-  setImmediate(() => {
-    writeQueued = false;
-    const tmp = DB_PATH + ".tmp";
-    const arr = Array.from(participants.values());
+  let writeQueued = false;
+  function persist() {
+    // Debounce multiple synchronous updates into a single atomic write.
+    if (writeQueued) return;
+    writeQueued = true;
+    setImmediate(() => {
+      writeQueued = false;
+      const tmp = DB_PATH + ".tmp";
+      const arr = Array.from(participants.values());
+      try {
+        fs.writeFileSync(tmp, JSON.stringify(arr), "utf8");
+        fs.renameSync(tmp, DB_PATH); // atomic on same filesystem
+      } catch (e) {
+        console.error("Failed to persist participants:", e.message);
+      }
+    });
+  }
+
+  function createParticipant({ id, condition, userAgent, assignSource }) {
+    const p = {
+      id,
+      created_at: now(),
+      updated_at: now(),
+      status: "started",
+      condition,
+      demographics: null,
+      interaction: null,
+      post_survey: null,
+      game: { meta: {}, decisions: {} },
+      user_agent: userAgent || "",
+      assign_source: assignSource || "random",
+    };
+    participants.set(id, p);
+    persist();
+    return p;
+  }
+
+  function getParticipant(id) {
+    return participants.get(id) || null;
+  }
+
+  function updateStage(id, { status, demographics, interaction, post_survey }) {
+    const p = participants.get(id);
+    if (!p) return null;
+    if (status !== undefined) p.status = status;
+    if (demographics !== undefined && demographics !== null) p.demographics = demographics;
+    if (interaction !== undefined && interaction !== null) p.interaction = interaction;
+    if (post_survey !== undefined && post_survey !== null) p.post_survey = post_survey;
+    p.updated_at = now();
+    persist();
+    return p;
+  }
+
+  // Apply an in-place change to a participant record and persist it.
+  function mutate(id, fn) {
+    const p = participants.get(id);
+    if (!p) return null;
+    if (!p.game) p.game = { meta: {}, decisions: {} };
+    fn(p);
+    p.updated_at = now();
+    persist();
+    return p;
+  }
+
+  function logEvent(participantId, type, data) {
+    const line = JSON.stringify({ participant_id: participantId, ts: now(), type, data: data || null });
     try {
-      fs.writeFileSync(tmp, JSON.stringify(arr), "utf8");
-      fs.renameSync(tmp, DB_PATH); // atomic on same filesystem
+      fs.appendFileSync(EVENTS_PATH, line + "\n", "utf8");
     } catch (e) {
-      console.error("Failed to persist participants:", e.message);
+      console.error("Failed to log event:", e.message);
     }
-  });
-}
+  }
 
-function createParticipant({ id, condition, userAgent, assignSource }) {
-  const p = {
-    id,
-    created_at: now(),
-    updated_at: now(),
-    status: "started",
-    condition,
-    demographics: null,
-    interaction: null,
-    post_survey: null,
-    game: { meta: {}, decisions: {} },
-    user_agent: userAgent || "",
-    assign_source: assignSource || "random",
+  function allParticipants() {
+    return Array.from(participants.values()).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  }
+
+  function eventsFor(id) {
+    try {
+      if (!fs.existsSync(EVENTS_PATH)) return [];
+      return fs
+        .readFileSync(EVENTS_PATH, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => {
+          try { return JSON.parse(l); } catch { return null; }
+        })
+        .filter((e) => e && e.participant_id === id);
+    } catch {
+      return [];
+    }
+  }
+
+  return {
+    createParticipant,
+    getParticipant,
+    updateStage,
+    mutate,
+    logEvent,
+    allParticipants,
+    eventsFor,
+    DB_PATH,
+    EVENTS_PATH,
   };
-  participants.set(id, p);
-  persist();
-  return p;
 }
 
-function getParticipant(id) {
-  return participants.get(id) || null;
-}
+const defaultStore = createStore({
+  dbPath: process.env.DB_PATH || path.join(__dirname, "..", "data", "study.json"),
+});
 
-function updateStage(id, { status, demographics, interaction, post_survey }) {
-  const p = participants.get(id);
-  if (!p) return null;
-  if (status !== undefined) p.status = status;
-  if (demographics !== undefined && demographics !== null) p.demographics = demographics;
-  if (interaction !== undefined && interaction !== null) p.interaction = interaction;
-  if (post_survey !== undefined && post_survey !== null) p.post_survey = post_survey;
-  p.updated_at = now();
-  persist();
-  return p;
-}
-
-// Apply an in-place change to a participant record and persist it.
-function mutate(id, fn) {
-  const p = participants.get(id);
-  if (!p) return null;
-  if (!p.game) p.game = { meta: {}, decisions: {} };
-  fn(p);
-  p.updated_at = now();
-  persist();
-  return p;
-}
-
-function logEvent(participantId, type, data) {
-  const line = JSON.stringify({ participant_id: participantId, ts: now(), type, data: data || null });
-  try {
-    fs.appendFileSync(EVENTS_PATH, line + "\n", "utf8");
-  } catch (e) {
-    console.error("Failed to log event:", e.message);
-  }
-}
-
-function allParticipants() {
-  return Array.from(participants.values()).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-}
-
-function eventsFor(id) {
-  try {
-    if (!fs.existsSync(EVENTS_PATH)) return [];
-    return fs
-      .readFileSync(EVENTS_PATH, "utf8")
-      .split("\n")
-      .filter(Boolean)
-      .map((l) => {
-        try { return JSON.parse(l); } catch { return null; }
-      })
-      .filter((e) => e && e.participant_id === id);
-  } catch {
-    return [];
-  }
-}
-
-module.exports = {
-  createParticipant,
-  getParticipant,
-  updateStage,
-  mutate,
-  logEvent,
-  allParticipants,
-  eventsFor,
-  DB_PATH,
-};
+module.exports = Object.assign({}, defaultStore, { createStore });

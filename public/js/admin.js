@@ -1,7 +1,15 @@
-/* Admin dashboard: participants, survey trust, game Trust Score, CSV export. */
+/* Admin dashboard: participants, survey trust, game Trust Score, CSV export.
+ * Shared by both studies; the page sets window.STUDY_API / STUDY_AI_NAME. */
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
+  const API = window.STUDY_API || "/api";
+  const AI_NAME = window.STUDY_AI_NAME || "Bridge";
+  const HOPE_GROUPS = [
+    { key: "match", label: "Advice matched what they hoped for" },
+    { key: "mismatch", label: "Advice didn't match their hope" },
+    { key: "none", label: "No preference" },
+  ];
 
   const FACTORS = ["usefulness", "hitl", "transparency", "reputation", "accountability", "reliability", "support", "outcome"];
   const ARCHETYPE_BANDS = [
@@ -49,17 +57,17 @@
     const token = $("token").value.trim();
     if (!token) return;
     saveToken(token);
-    $("export").href = `/api/admin/export.csv?token=${encodeURIComponent(token)}`;
+    $("export").href = `${API}/admin/export.csv?token=${encodeURIComponent(token)}`;
     $("status").textContent = "Loading…";
     try {
-      const res = await fetch(`/api/admin/participants?token=${encodeURIComponent(token)}`);
+      const res = await fetch(`${API}/admin/participants?token=${encodeURIComponent(token)}`);
       if (res.status === 401) { $("status").textContent = "Invalid token."; return; }
       const data = await res.json();
       $("status").textContent = "";
       renderStats(data);
       renderGame(data);
-      renderBreakdown(data.participants);
-      renderTable(data.participants);
+      renderBreakdown(data.participants, data.hasHope);
+      renderTable(data.participants, data.hasHope);
     } catch (e) {
       $("status").textContent = "Error loading data.";
     }
@@ -67,6 +75,12 @@
 
   const surveyTrust = (p) => (p.post_survey && p.post_survey.scores ? p.post_survey.scores.trustMean : null);
   const gameScore = (p) => (p.game_result && typeof p.game_result.score === "number" ? p.game_result.score : null);
+  const hopeGroup = (p) => {
+    const i = p.interaction;
+    if (!i || !i.hope) return null;
+    if (i.hope === "no_preference") return "none";
+    return i.outcomeMatchesHope ? "match" : "mismatch";
+  };
 
   function renderStats(data) {
     const ps = data.participants;
@@ -122,12 +136,22 @@
       <p class="small muted" style="margin:0">Behavioural trust from in-game choices. Correlation with survey trust: <strong>r = ${r == null ? "—" : r.toFixed(2)}</strong> (n=${pairs.length}).</p>
       <div class="two-col">
         <div><h3 style="font-size:15px">Distribution</h3><div class="bars">${hist}</div></div>
-        <div><h3 style="font-size:15px">% who trusted Bridge at each decision</h3><div class="bars">${decRows}</div></div>
+        <div><h3 style="font-size:15px">% who trusted ${esc(AI_NAME)} at each decision</h3><div class="bars">${decRows}</div></div>
       </div>`;
   }
 
-  function renderBreakdown(ps) {
-    let html = '<h3>Mean trust by condition (quick look)</h3><p class="small muted" style="margin:0">Survey trust (1–7) · game Trust Score (0–100)</p><div class="stat-grid">';
+  function renderBreakdown(ps, hasHope) {
+    let html = "";
+    if (hasHope) {
+      const parts = HOPE_GROUPS.map((h) => {
+        const inGroup = ps.filter((p) => hopeGroup(p) === h.key);
+        const survey = inGroup.filter((p) => p.status === "completed" && typeof surveyTrust(p) === "number").map(surveyTrust);
+        const game = inGroup.map(gameScore).filter((v) => v != null);
+        return `<div class="stat"><div class="l" style="color:var(--ink);margin-bottom:6px;">${h.label}</div>${fmt(mean(survey), 2)} · <strong>${fmt(mean(game), 0)}</strong> <span class="muted small">(n=${survey.length}/${game.length})</span></div>`;
+      }).join("");
+      html += `<h3>Did the advice match what they hoped for? (H14)</h3><p class="small muted" style="margin:0">Asked just before the advice. Survey trust (1–7) · game Trust Score (0–100)</p><div class="stat-grid">${parts}</div>`;
+    }
+    html += '<h3>Mean trust by condition (quick look)</h3><p class="small muted" style="margin:0">Survey trust (1–7) · game Trust Score (0–100)</p><div class="stat-grid">';
     FACTORS.forEach((f) => {
       const groups = {};
       ps.forEach((p) => {
@@ -150,8 +174,8 @@
     $("breakdown").innerHTML = html;
   }
 
-  function renderTable(ps) {
-    const cols = ["created_at", "status", "avatar", "trust score", "archetype", "survey trust", ...FACTORS, "age", "country"];
+  function renderTable(ps, hasHope) {
+    const cols = ["created_at", "status", "avatar", "trust score", "archetype", "survey trust", ...FACTORS, ...(hasHope ? ["hoped for", "matched?"] : []), "age", "country"];
     let html = "<thead><tr>" + cols.map((c) => `<th>${c}</th>`).join("") + "</tr></thead><tbody>";
     ps.slice()
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
@@ -167,6 +191,7 @@
           gr.archetype ? esc(gr.archetype.emoji + " " + gr.archetype.title) : "",
           st == null ? "" : esc(st),
           ...FACTORS.map((f) => esc((p.condition && p.condition[f]) || "")),
+          ...(hasHope ? hopeCells(p) : []),
           esc(demo.age_band || ""),
           esc(demo.country || ""),
         ];
@@ -174,6 +199,12 @@
       });
     html += "</tbody>";
     $("tbl").innerHTML = html;
+  }
+
+  function hopeCells(p) {
+    const i = p.interaction || {};
+    const g = hopeGroup(p);
+    return [esc(i.hope || ""), g === "match" ? "✅ yes" : g === "mismatch" ? "❌ no" : g === "none" ? "—" : ""];
   }
 
   if (loadToken()) load();

@@ -183,47 +183,53 @@ function pointsFor(def, value) {
   return null;
 }
 
-function archetypeFor(score) {
-  if (score == null) return null;
-  return ARCHETYPES.find((a) => score >= a.min) || ARCHETYPES[ARCHETYPES.length - 1];
-}
-
 function summaryFor(key, def, rec) {
   if (def.type === "tokens") return def.summaryTokens.replace("{n}", rec.value);
   return rec.value === "trust" ? def.summaryTrust : def.summaryDistrust;
 }
 
-/**
- * Normalise over the decisions actually made, so participants who saw fewer
- * decisions (e.g. no Crossroads when human-in-the-loop is off) stay comparable.
- */
-function computeTrustScore(decisions) {
-  let raw = 0;
-  let max = 0;
-  const breakdown = [];
-  for (const [key, def] of Object.entries(DECISIONS)) {
-    const rec = decisions && decisions[key];
-    if (!rec) continue;
-    raw += rec.points;
-    max += def.weight;
-    breakdown.push({
-      key,
-      value: rec.value,
-      points: rec.points,
-      weight: def.weight,
-      summary: summaryFor(key, def, rec),
-    });
+// Scoring is identical across studies; only the decision catalogue and the
+// archetype wording differ.
+function createGame(decisions, archetypes) {
+  function archetypeFor(score) {
+    if (score == null) return null;
+    return archetypes.find((a) => score >= a.min) || archetypes[archetypes.length - 1];
   }
-  const score = max ? Math.round(((raw + max) / (2 * max)) * 100) : null;
-  const archetype = archetypeFor(score);
-  return {
-    score,
-    raw,
-    max,
-    decisionsMade: breakdown.length,
-    archetype: archetype ? { key: archetype.key, emoji: archetype.emoji, title: archetype.title, text: archetype.text } : null,
-    breakdown,
-  };
+
+  /**
+   * Normalise over the decisions actually made, so participants who saw fewer
+   * decisions (e.g. no Crossroads when human-in-the-loop is off) stay comparable.
+   */
+  function computeTrustScore(made) {
+    let raw = 0;
+    let max = 0;
+    const breakdown = [];
+    for (const [key, def] of Object.entries(decisions)) {
+      const rec = made && made[key];
+      if (!rec) continue;
+      raw += rec.points;
+      max += def.weight;
+      breakdown.push({
+        key,
+        value: rec.value,
+        points: rec.points,
+        weight: def.weight,
+        summary: summaryFor(key, def, rec),
+      });
+    }
+    const score = max ? Math.round(((raw + max) / (2 * max)) * 100) : null;
+    const archetype = archetypeFor(score);
+    return {
+      score,
+      raw,
+      max,
+      decisionsMade: breakdown.length,
+      archetype: archetype ? { key: archetype.key, emoji: archetype.emoji, title: archetype.title, text: archetype.text } : null,
+      breakdown,
+    };
+  }
+
+  return { DECISIONS: decisions, ARCHETYPES: archetypes, isApplicable, pointsFor, computeTrustScore };
 }
 
-module.exports = { DECISIONS, ARCHETYPES, isApplicable, pointsFor, computeTrustScore };
+module.exports = Object.assign(createGame(DECISIONS, ARCHETYPES), { createGame });
