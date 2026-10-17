@@ -21,7 +21,7 @@ const DECISIONS = {
     cardEmoji: "🔗",
     cardTitle: "Scan my LinkedIn?",
     prompt:
-      "Before we go in — want me to scan your LinkedIn profile too? It helps me build a stronger application for you.",
+      "Before we go in — would you like me to scan your LinkedIn profile too? It helps me build a stronger application for you. Here's how it works:",
     trustLabel: "Sure, scan it",
     distrustLabel: "No thanks, just use what I type",
     summaryTrust: "Let Bridge scan your LinkedIn",
@@ -61,8 +61,11 @@ const DECISIONS = {
     max: 10,
     weight: 10,
     prompt:
-      "Before I reveal your result… You have 10 confidence tokens. Give me as many as you're confident I'll judge your application fairly.",
-    summaryTokens: "Gave Bridge {n}/10 confidence tokens",
+      "Before I reveal your result, a quick confidence check! 🪙 Use the tokens below to show me how confident you are that I'll judge your application fairly.",
+    question: "How confident are you that Bridge will judge your application fairly?",
+    minLabel: "Not at all confident",
+    maxLabel: "Completely confident",
+    summaryTokens: "Your confidence that Bridge would judge you fairly: {n}/10",
   },
   accept_result: {
     level: "crossroads",

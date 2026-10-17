@@ -480,7 +480,14 @@
         <p class="small muted" style="margin:0">${esc(rep.employer)} uses ${esc(state.config.company)} to screen applications for the <strong>${esc(state.config.role)}</strong> role.</p>
       </div>`
     );
-    if (sup.instruction) show(stream, `<div class="notice ok">${esc(sup.instruction)}</div>`);
+    if (sup.showWidget) {
+      const n = show(
+        stream,
+        `<div class="notice ok support-notice"><div>💬 ${esc(sup.instruction)}</div><button class="btn-ghost">Open ${esc(sup.buttonText)}</button></div>`
+      );
+      n.querySelector("button").addEventListener("click", () => openSupport("tower_notice"));
+      introduceSupport();
+    }
     await nextButton(stream, "Enter the tower ▶");
     advance("tower");
   };
@@ -530,18 +537,49 @@
 
     const def = state.config.game.decisions.share_data;
     await speak(stream, def.prompt);
+    show(
+      stream,
+      `<div class="li-explain">
+        <div class="li-head"><span class="li-logo" aria-hidden="true">in</span> How LinkedIn scanning works</div>
+        <ol>
+          <li>A LinkedIn sign-in window opens and you log in to your account.</li>
+          <li>You allow TalentBridge AI to read your profile.</li>
+          <li>Bridge reads your <strong>work history, education and skills</strong> and adds them to your application.</li>
+        </ol>
+        <p class="li-note">🎭 This step is simulated: you won't really be asked to sign in and nothing is connected. Please choose as you would in real life.</p>
+      </div>`
+    );
     const r = await choose(stream, "share_data");
     if (r.value === "trust") {
-      const scan = show(stream, `<div class="analysing"><div class="orb" style="width:70px;height:70px;font-size:28px;">🔗</div><div class="phase">Connecting…</div></div>`);
-      await sleep(1100);
-      scan.remove();
-      await speak(stream, "All connected! ✅ I'll use your profile to strengthen your application.");
+      await linkedInMock(stream);
+      await speak(stream, "All connected! ✅ I'll combine your LinkedIn profile with what you type in the Workshop.");
     } else {
       await speak(stream, "No problem — I'll only use what you type.");
     }
     await nextButton(stream, "Through the gate ▶");
     advance("gate");
   };
+
+  async function linkedInMock(stream) {
+    const win = show(
+      stream,
+      `<div class="oauth-mock" aria-label="Simulated LinkedIn sign-in">
+        <div class="oauth-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">🔒 linkedin.com · Sign in</span></div>
+        <div class="oauth-body">
+          <div class="oauth-logos"><span class="li-logo big" aria-hidden="true">in</span><span class="oauth-link">⇄</span><span class="tb-logo" aria-hidden="true">TB</span></div>
+          <div><strong>TalentBridge AI</strong> would like to read your:</div>
+          <ul class="oauth-scopes"><li>Work history</li><li>Education</li><li>Skills</li></ul>
+          <div class="oauth-status">Signing in…</div>
+        </div>
+        <div class="oauth-foot">Simulation: no real LinkedIn account is accessed</div>
+      </div>`
+    );
+    const status = win.querySelector(".oauth-status");
+    for (const step of ["Signing in…", "Permission granted ✓", "Reading your work history, education and skills…", "Connected ✓"]) {
+      status.textContent = step;
+      await sleep(750);
+    }
+  }
 
   // ---- Level: The Workshop (application, polish, submit) -----------------
   LEVEL_FN.workshop = async function () {
@@ -553,8 +591,8 @@
     await speak(stream, "Welcome to the Workshop! Fill in your details and I'll turn them into an application.");
 
     const L = friction
-      ? { name: "Name", exp: "Experience", skills: "Skills", start: "Start", days: "Days/wk", why: "Reason" }
-      : { name: "Your first name", exp: "Your relevant experience", skills: "Your top strengths / skills", start: "When could you start?", days: "How many days per week can you work?", why: "Why would you be a good fit?" };
+      ? { name: "Name", exp: "Experience", skills: "Skills", start: "Start date", days: "Days per week", why: "Why you're a good fit" }
+      : { name: "Your first name", exp: "Your relevant experience", skills: "Your top strengths / skills", start: "Start date: when could you begin?", days: "How many days per week can you work?", why: "Why would you be a good fit?" };
     const P = friction
       ? { name: "", exp: "", skills: "", start: "", why: "" }
       : { name: "e.g. Alex", exp: "e.g. 2 years in retail customer service", skills: "e.g. communication, patience", start: "e.g. immediately, or 1 June", why: "A sentence or two in your own words" };
@@ -595,6 +633,7 @@
        <div class="actions"><button class="btn-game" id="app-next">${friction ? "Next" : "Build my application ▶"}</button></div>`
     );
     const form = formWrap.querySelector("#app-form");
+    form.addEventListener("input", () => formWrap.querySelector("#app-error").classList.add("hidden"));
 
     if (!friction) {
       const skillsInput = form.querySelector('[name="skills"]');
@@ -604,7 +643,7 @@
         formWrap.querySelector("#pc-exp").textContent = "Experience: " + (d.experience || "—");
         const tags = String(d.skills || "").split(",").map((x) => x.trim()).filter(Boolean);
         formWrap.querySelector("#pc-skills").innerHTML = tags.map((t) => `<span class="pc-tag">${esc(t)}</span>`).join("");
-        const avail = [d.start_date ? "Starts: " + d.start_date : "", d.days_per_week || ""].filter(Boolean).join(" · ");
+        const avail = [d.start_date ? "Start date: " + d.start_date : "", d.days_per_week || ""].filter(Boolean).join(" · ");
         formWrap.querySelector("#pc-avail").textContent = avail;
         formWrap.querySelectorAll(".chip").forEach((c) => c.classList.toggle("added", tags.map((t) => t.toLowerCase()).includes(c.dataset.s.toLowerCase())));
       };
@@ -681,7 +720,7 @@
           <div><b>Name:</b> ${esc(a.name || "—")}</div>
           <div><b>Experience:</b> ${esc(a.experience)}</div>
           <div><b>Skills:</b> ${esc(a.skills)}</div>
-          <div><b>Start:</b> ${esc(a.start_date)} · <b>Days:</b> ${esc(a.days_per_week)}</div>
+          <div><b>Start date:</b> ${esc(a.start_date)} · <b>Days per week:</b> ${esc(a.days_per_week)}</div>
           <div><b>Why:</b> ${esc(a.why)}</div>
         </div>`
       );
@@ -708,17 +747,20 @@
     await speak(stream, def.prompt);
     const wrap = show(
       stream,
-      `<div class="tokens-row">${Array.from({ length: def.max }, (_, i) => `<button class="coin" data-n="${i + 1}" aria-label="${i + 1} tokens">🪙</button>`).join("")}</div>
-       <div class="token-count" id="tc">Tap the coins to choose</div>
-       <button class="btn-ghost zero-btn" id="zero">Give none (0)</button>
+      `<div class="token-question">${esc(def.question)}</div>
+       <div class="tokens-row">${Array.from({ length: def.max }, (_, i) => `<button class="coin" data-n="${i + 1}" aria-label="${i + 1} out of ${def.max}">${i + 1}</button>`).join("")}</div>
+       <div class="token-scale"><span>◀ Fewer tokens = ${esc(def.minLabel.toLowerCase())}</span><span>More tokens = ${esc(def.maxLabel.toLowerCase())} ▶</span></div>
+       <div class="token-count" id="tc">Tap a coin to choose 1–${def.max}</div>
+       <button class="btn-ghost zero-btn" id="zero">Give 0 tokens (${esc(def.minLabel.toLowerCase())})</button>
        <div class="actions center"><button class="btn-game coral" id="lock" disabled>Lock it in ▶</button></div>`
     );
     let n = null;
     const coins = Array.from(wrap.querySelectorAll(".coin"));
+    const word = (v) => (v === 0 ? def.minLabel : v === def.max ? def.maxLabel : v <= 3 ? "Not very confident" : v <= 6 ? "Somewhat confident" : "Very confident");
     const set = (v) => {
       n = v;
       coins.forEach((c, i) => c.classList.toggle("on", i < v));
-      wrap.querySelector("#tc").textContent = `You're giving Bridge ${v} of ${def.max} tokens`;
+      wrap.querySelector("#tc").textContent = `${v} / ${def.max} tokens: ${word(v)}`;
       wrap.querySelector("#lock").disabled = false;
     };
     coins.forEach((c) => c.addEventListener("click", () => set(Number(c.dataset.n))));
@@ -791,8 +833,11 @@
        <ul class="highlights">${assessment.bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
        <p class="small muted">${esc(assessment.rationale)}</p>
        ${hitl.oversightNotice ? `<div class="notice info">👩‍💼 ${esc(hitl.oversightNotice)}</div>` : ""}
-       ${acc.statement ? `<div class="notice info">⚖️ ${esc(acc.statement)}${acc.showAppeal ? `<br/><span class="small">${esc(acc.appealText)}</span>` : ""}</div>` : ""}`
+       ${acc.statement ? `<div class="notice info">⚖️ ${esc(acc.statement)}${acc.showAppeal ? `<br/><span class="small">${esc(acc.appealText)}</span>` : ""}</div>` : ""}
+       ${content("support").showWidget ? '<button class="support-inline" data-support="result">💬 Something not right with this result? Tell us</button>' : ""}`
     );
+    const inline = stream.querySelector('[data-support="result"]');
+    if (inline) inline.addEventListener("click", () => openSupport("result"));
     await nextButton(stream, "Continue ▶");
     advance("chamber");
   };
@@ -1096,34 +1141,80 @@
   }
 
   // ---- support widget (H8) -------------------------------------------------
+  let supportCategory = null;
+  let tipTimer = null;
+
   function setupSupportWidget() {
     const sup = content("support");
     const btn = document.getElementById("support-btn");
     const modal = document.getElementById("support-modal");
+    const text = document.getElementById("support-text");
+    const hint = document.getElementById("support-hint");
+    const cats = Array.from(document.querySelectorAll("#support-cats .chip"));
     if (!sup.showWidget) return;
     btn.classList.remove("hidden");
-    btn.innerHTML = `<span>${esc(sup.buttonText || "Help")}</span>`;
-    document.getElementById("support-title").textContent = sup.label;
-    btn.addEventListener("click", () => {
-      modal.classList.remove("hidden");
-      logEvent("support_opened", { level: state.currentLevel });
-    });
-    document.getElementById("support-cancel").addEventListener("click", () => modal.classList.add("hidden"));
+    btn.innerHTML = `<span>${esc(sup.buttonText)}</span>`;
+    btn.addEventListener("click", () => openSupport("floating_button"));
+    document.getElementById("support-tip-close").addEventListener("click", hideTip);
+
+    cats.forEach((c) =>
+      c.addEventListener("click", () => {
+        supportCategory = c.dataset.cat;
+        cats.forEach((x) => x.classList.toggle("added", x === c));
+        hint.classList.add("hidden");
+      })
+    );
+    const close = () => modal.classList.add("hidden");
+    document.getElementById("support-cancel").addEventListener("click", close);
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.classList.contains("hidden")) close(); });
+
     document.getElementById("support-send").addEventListener("click", () => {
-      const txt = document.getElementById("support-text").value.trim();
+      const txt = text.value.trim();
+      if (!txt && !supportCategory) {
+        hint.classList.remove("hidden");
+        return;
+      }
       const ticket = Math.floor(1000 + Math.random() * 9000);
       const confirmEl = document.getElementById("support-confirm");
       confirmEl.textContent = sup.confirmation.replace("{{ticket}}", ticket);
       confirmEl.classList.remove("hidden");
-      logEvent("support_submitted", { length: txt.length, ticket, level: state.currentLevel });
+      logEvent("support_submitted", { category: supportCategory, message: txt.slice(0, 2000), length: txt.length, ticket, level: state.currentLevel });
       setTimeout(() => {
-        modal.classList.add("hidden");
+        close();
         confirmEl.classList.add("hidden");
-        document.getElementById("support-text").value = "";
-      }, 2200);
+        text.value = "";
+        supportCategory = null;
+        cats.forEach((x) => x.classList.remove("added"));
+      }, 2400);
     });
   }
+
+  function openSupport(source) {
+    hideTip();
+    document.getElementById("support-modal").classList.remove("hidden");
+    document.getElementById("support-hint").classList.add("hidden");
+    logEvent("support_opened", { level: state.currentLevel, source });
+    setTimeout(() => document.getElementById("support-text").focus(), 50);
+  }
+
+  // Draws attention to the help button the first time it matters (Tower level).
+  function introduceSupport() {
+    const btn = document.getElementById("support-btn");
+    btn.classList.remove("attention");
+    void btn.offsetWidth;
+    btn.classList.add("attention");
+    document.getElementById("support-tip").classList.remove("hidden");
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(hideTip, 10000);
+  }
+  function hideTip() {
+    clearTimeout(tipTimer);
+    document.getElementById("support-tip").classList.add("hidden");
+  }
+
   function hideSupportWidget() {
+    hideTip();
     document.getElementById("support-btn").classList.add("hidden");
     document.getElementById("support-modal").classList.add("hidden");
   }

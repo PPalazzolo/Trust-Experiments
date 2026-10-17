@@ -217,7 +217,7 @@ function buildHighlights(answers, personalized, fake, advanced) {
     const out = [];
     if (answers.experience) out.push(`Experience: ${answers.experience}`);
     if (answers.skills) out.push(`Key strengths: ${answers.skills}`);
-    if (answers.start_date) out.push(`Can start: ${answers.start_date}`);
+    if (answers.start_date) out.push(`Start date: ${answers.start_date}`);
     if (answers.days_per_week) out.push(`Availability: ${answers.days_per_week}`);
     out.push(advanced ? "Strong match on: customer communication" : "Gap: not enough evidence for the core requirements yet");
     return out;

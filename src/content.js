@@ -122,10 +122,10 @@ const SUPPORT = {
     // A clear, visible instruction banner shown during the task (not just a
     // bare floating button), plus the floating help button itself.
     instruction:
-      "Need help or something not working? You can report a problem or send feedback any time using the Help button at the bottom-right. 💬",
-    label: "Report a problem or give feedback",
-    buttonText: "Help",
-    confirmation: "Thanks — your report has been received (ticket #TB-{{ticket}}). Our support team will follow up by email.",
+      "Need help, spotted a problem, or want to tell us something? Use the Help & feedback button in the bottom-right corner of your screen. It's there on every page.",
+    label: "Help & feedback",
+    buttonText: "Help & feedback",
+    confirmation: "Thanks — your message has been received (ticket #TB-{{ticket}}). Our support team will look into it.",
   },
   off: {
     showWidget: false,
