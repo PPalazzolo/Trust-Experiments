@@ -54,7 +54,67 @@ body {
 .app {
   max-width: 720px;
   margin: 0 auto;
-  padding: 56px 20px 96px;
+  padding: 20px 20px 110px;
+}
+
+/* ---- Gamified journey map ---- */
+.journey {
+  max-width: 720px;
+  margin: 26px auto 0;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.j-step { display: flex; flex-direction: column; align-items: center; gap: 5px; flex-shrink: 0; }
+.j-dot {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: #fff; border: 2px solid var(--line);
+  font-size: 18px; filter: grayscale(0.6); opacity: 0.65;
+  transition: all 0.3s ease;
+}
+.j-label { font-size: 11px; color: var(--muted); font-weight: 600; opacity: 0.7; }
+.j-line { height: 2px; background: var(--line); flex: 1; margin: 0 4px; margin-bottom: 18px; border-radius: 2px; }
+.j-step.active .j-dot {
+  border-color: var(--brand); filter: none; opacity: 1;
+  transform: scale(1.18); box-shadow: 0 6px 16px rgba(91,75,255,0.35);
+}
+.j-step.active .j-label { color: var(--brand-dark); opacity: 1; }
+.j-step.done .j-dot { border-color: var(--ok); filter: none; opacity: 1; background: var(--ok-bg); }
+.j-step.done .j-label { color: var(--ok); opacity: 1; }
+
+/* ---- Mascot "Bridge" ---- */
+.mascot {
+  position: fixed; left: 18px; bottom: 18px; z-index: 45;
+  display: flex; align-items: flex-end; gap: 10px; max-width: 300px;
+}
+.mascot-avatar {
+  width: 58px; height: 58px; border-radius: 50%;
+  background: linear-gradient(135deg, #eef0ff, #fff);
+  display: grid; place-items: center; flex-shrink: 0;
+  box-shadow: var(--shadow); border: 2px solid #fff;
+}
+.mascot-bubble {
+  background: #fff; border: 1px solid var(--line); border-radius: 16px 16px 16px 4px;
+  padding: 10px 14px; font-size: 13px; font-weight: 500; color: var(--ink);
+  box-shadow: var(--shadow); line-height: 1.4;
+}
+.mascot.pop .mascot-avatar { animation: bounce 0.5s ease; }
+@keyframes bounce {
+  0%,100% { transform: translateY(0); }
+  30% { transform: translateY(-8px); }
+  60% { transform: translateY(-3px); }
+}
+
+/* ---- Confetti ---- */
+.confetti-layer { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 100; }
+.confetti {
+  position: absolute; top: -14px; width: 10px; height: 14px; border-radius: 2px;
+  animation: fall linear forwards;
+}
+@keyframes fall {
+  to { transform: translateY(105vh) rotate(540deg); opacity: 0.9; }
 }
 
 .loading { text-align: center; color: var(--muted); margin-top: 80px; }
@@ -304,4 +364,11 @@ p { margin: 0 0 14px; }
   .bytes { grid-template-columns: 1fr; }
   .card { padding: 22px; }
   .likert-opt .num { font-size: 12px; }
+  .journey { padding: 0 10px; }
+  .j-dot { width: 30px; height: 30px; font-size: 14px; }
+  .j-label { display: none; }
+  .j-line { margin-bottom: 0; }
+  .mascot { max-width: 220px; left: 10px; bottom: 10px; }
+  .mascot-avatar { width: 46px; height: 46px; }
+  .mascot-bubble { font-size: 12px; padding: 8px 11px; }
 }

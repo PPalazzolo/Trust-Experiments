@@ -107,19 +107,35 @@ app.post("/api/participants/:id/interaction", (req, res) => {
   if (!p) return res.status(404).json({ error: "not_found" });
 
   const answers = (req.body && req.body.answers) || {};
-  const optedOut = !!(req.body && req.body.optedOut);
 
+  // The AI always produces a result now; the human-review choice happens AFTER
+  // the result (see /human-review below), not before the screening.
   const assessment = generateAssessment(p.condition, answers);
-  const interaction = { answers, optedOut, assessment, at: new Date().toISOString() };
+  const interaction = { answers, assessment, at: new Date().toISOString() };
 
   db.updateStage(p.id, { status: "task_done", interaction });
   db.logEvent(p.id, "assessment_generated", {
     reliability: p.condition.reliability,
-    optedOut,
+    outcome: assessment.decision,
     hallucinated: assessment.hallucinated,
   });
 
-  res.json({ assessment, optedOut });
+  res.json({ assessment });
+});
+
+// ---------------------------------------------------------------------------
+// Record the post-result human-review choice (H2: human-in-the-loop / opt-out).
+// Offered only when the HITL condition is on; this is the applicant choosing to
+// have a human also review the application AFTER seeing the AI result.
+// ---------------------------------------------------------------------------
+app.post("/api/participants/:id/human-review", (req, res) => {
+  const p = db.getParticipant(req.params.id);
+  if (!p) return res.status(404).json({ error: "not_found" });
+  const requested = !!(req.body && req.body.requested);
+  const interaction = Object.assign({}, p.interaction || {}, { humanReviewRequested: requested });
+  db.updateStage(p.id, { interaction });
+  db.logEvent(p.id, "human_review_choice", { requested });
+  res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -269,7 +285,7 @@ function toCSV(participants) {
     ...factorCols,
     ...demoCols,
     "pre_region_bucket",
-    "interaction_optedOut",
+    "interaction_humanReviewRequested",
     "interaction_outcome",
     "interaction_hallucinated",
     ...postCols,
@@ -293,7 +309,7 @@ function toCSV(participants) {
       ...Object.keys(FACTORS).map((f) => cond[f] ?? ""),
       ...PRE_SURVEY.items.map((i) => demo[i.id] ?? ""),
       regionFromCountry(demo.country),
-      inter.optedOut ? "1" : "0",
+      inter.humanReviewRequested ? "1" : "0",
       inter.assessment ? inter.assessment.decision ?? "" : "",
       inter.assessment && inter.assessment.hallucinated ? "1" : "0",
       ...postCols.map((c) => post[c.replace(/^post_/, "")] ?? ""),

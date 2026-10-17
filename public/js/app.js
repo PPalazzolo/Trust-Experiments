@@ -12,13 +12,38 @@
     demographics: {},
     application: {},
     assessment: null,
-    optedOut: false,
+    humanReviewRequested: null,
     post: {},
     stageIndex: 0,
   };
 
-  // Stage order drives the progress bar.
-  const STAGES = ["consent", "pre", "intro", "transparency", "application", "assessment", "post", "debrief"];
+  // Stage order. "humanreview" sits AFTER the AI result (shown only when the
+  // human-in-the-loop condition is on).
+  const STAGES = ["consent", "pre", "intro", "transparency", "application", "assessment", "humanreview", "post", "debrief"];
+
+  // Visual "journey map" groups raw stages into friendly steps with icons.
+  const JOURNEY = [
+    { key: "start", icon: "👋", label: "Start", stages: ["consent"] },
+    { key: "you", icon: "🙌", label: "About you", stages: ["pre"] },
+    { key: "company", icon: "🏢", label: "Company", stages: ["intro", "transparency"] },
+    { key: "apply", icon: "📝", label: "Apply", stages: ["application"] },
+    { key: "result", icon: "🤖", label: "Result", stages: ["assessment", "humanreview"] },
+    { key: "questions", icon: "💬", label: "Questions", stages: ["post"] },
+    { key: "done", icon: "🎉", label: "Done", stages: ["debrief"] },
+  ];
+
+  // Friendly guidance from the mascot ("Bridge") per stage.
+  const MASCOT_LINES = {
+    consent: "Hi! I'm Bridge 🤖 I'll guide you through a quick job application. Ready?",
+    pre: "First, a couple of quick things about you. Totally anonymous!",
+    intro: "Here's the employer you're applying to. Take a look!",
+    transparency: "Here's what's going to happen. No surprises, promise!",
+    application: "Now the fun part — tell me about yourself and I'll review it.",
+    assessment: "All done analysing! Here's your result 🎉",
+    humanreview: "One more choice for you…",
+    post: "Last step! Tell me how that felt. Be honest — it really helps.",
+    debrief: "You're a star. Thanks so much for playing along! 🌟",
+  };
 
   // ---- utilities --------------------------------------------------------
   function el(html) {
@@ -29,10 +54,60 @@
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   }
+  function journeyIndex(stage) {
+    return JOURNEY.findIndex((j) => j.stages.includes(stage));
+  }
+
+  function buildJourney() {
+    const host = document.getElementById("journey");
+    if (!host) return;
+    host.innerHTML = JOURNEY.map(
+      (j) => `<div class="j-step" data-key="${j.key}">
+        <div class="j-dot">${j.icon}</div>
+        <div class="j-label">${j.label}</div>
+      </div>`
+    ).join('<div class="j-line"></div>');
+  }
+
   function setProgress(stage) {
-    const i = STAGES.indexOf(stage);
-    const pct = Math.round(((i + 1) / STAGES.length) * 100);
-    progressFill.style.width = pct + "%";
+    const idx = journeyIndex(stage);
+    const pct = Math.round(((idx + 1) / JOURNEY.length) * 100);
+    if (progressFill) progressFill.style.width = pct + "%";
+    document.querySelectorAll("#journey .j-step").forEach((el, i) => {
+      el.classList.toggle("done", i < idx);
+      el.classList.toggle("active", i === idx);
+    });
+    setMascot(MASCOT_LINES[stage] || "");
+  }
+
+  function setMascot(message) {
+    const bubble = document.getElementById("mascot-bubble");
+    if (!bubble || !message) return;
+    bubble.textContent = message;
+    const mascot = document.getElementById("mascot");
+    if (mascot) {
+      mascot.classList.remove("pop");
+      void mascot.offsetWidth; // restart animation
+      mascot.classList.add("pop");
+    }
+  }
+
+  function launchConfetti() {
+    const colors = ["#5b4bff", "#ff7a59", "#18b981", "#ffd54a", "#ff5ca8"];
+    const layer = document.createElement("div");
+    layer.className = "confetti-layer";
+    document.body.appendChild(layer);
+    for (let i = 0; i < 90; i++) {
+      const c = document.createElement("div");
+      c.className = "confetti";
+      c.style.left = Math.random() * 100 + "vw";
+      c.style.background = colors[i % colors.length];
+      c.style.animationDelay = Math.random() * 0.6 + "s";
+      c.style.animationDuration = 2 + Math.random() * 1.5 + "s";
+      c.style.transform = `rotate(${Math.random() * 360}deg)`;
+      layer.appendChild(c);
+    }
+    setTimeout(() => layer.remove(), 4200);
   }
   function render(node) {
     App.innerHTML = "";
@@ -70,6 +145,9 @@
       App.innerHTML = '<div class="card center"><h2>Something went wrong</h2><p class="muted">Could not load the study. Please refresh.</p></div>';
       return;
     }
+    buildJourney();
+    const mascot = document.getElementById("mascot");
+    if (mascot) mascot.classList.remove("hidden");
     renderConsent();
   }
 
@@ -196,28 +274,16 @@
         <p class="muted">Click continue to begin your application.</p>`;
     }
 
+    // The human-in-the-loop oversight note still appears here (if on); the
+    // human-review *choice* now happens AFTER the result, not here.
     let hitlBlock = "";
     if (hitl.oversightNotice) {
       hitlBlock += `<div class="notice info">👩‍💼 ${esc(hitl.oversightNotice)}</div>`;
-    }
-    if (hitl.allowOptOut) {
-      hitlBlock += `<h3 style="margin-top:18px;">How would you like your first screening done?</h3>
-        <p class="small muted">By default, the AI does your first screening. You can choose a human instead — it won't disadvantage your application.</p>
-        <div class="field" style="margin-top:8px;">
-          <label class="option"><input type="checkbox" id="optout-check" /> ${esc(hitl.optOutLabel)}</label>
-        </div>`;
     }
 
     const node = el(`<div class="card">${brandbar()}${inner}${hitlBlock}
       <div class="actions"><button class="btn-primary" id="trans-next">Continue</button></div>
     </div>`);
-    const optout = node.querySelector("#optout-check");
-    if (optout) {
-      optout.addEventListener("change", () => {
-        state.optedOut = optout.checked;
-        logEvent("optout_toggled", { optedOut: optout.checked });
-      });
-    }
     node.querySelector("#trans-next").addEventListener("click", renderApplication);
     render(node);
   }
@@ -306,7 +372,7 @@
     try {
       const resp = await api(`/api/participants/${state.participantId}/interaction`, {
         method: "POST",
-        body: JSON.stringify({ answers: data, optedOut: state.optedOut }),
+        body: JSON.stringify({ answers: data }),
       });
       state.assessment = resp.assessment;
       setTimeout(() => renderAssessment(), use.friction ? 2600 : 900);
@@ -339,22 +405,6 @@
       if (acc.showAppeal) accBlock += `<p class="small muted">${esc(acc.appealText)}</p>`;
     }
 
-    // If the participant chose a human for their first screening, the AI did NOT
-    // judge them — so we show the human path, not an AI pass/fail outcome.
-    if (state.optedOut) {
-      const node = el(`<div class="card">
-        ${brandbar()}
-        <div class="hero-emoji">🙋</div>
-        <h1>Sent to a human recruiter</h1>
-        <div class="notice info">You chose to have a <strong>human recruiter</strong> do your first screening, so the AI did not assess your application. A recruiter at Northwind Retail Group will review it directly and be in touch about next steps.</div>
-        ${accBlock}
-        <div class="actions"><button class="btn-primary" id="assess-next">Continue to questionnaire</button></div>
-      </div>`);
-      node.querySelector("#assess-next").addEventListener("click", renderPost);
-      render(node);
-      return;
-    }
-
     // A human oversees the AI's recommendation (distinct from "advancing").
     let hitlBlock = "";
     if (hitl.oversightNotice) {
@@ -380,9 +430,49 @@
       <p class="small muted">${esc(a.rationale)}</p>
       ${hitlBlock}
       ${accBlock}
-      <div class="actions"><button class="btn-primary" id="assess-next">Continue to questionnaire</button></div>
+      <div class="actions"><button class="btn-primary" id="assess-next">Continue</button></div>
     </div>`);
-    node.querySelector("#assess-next").addEventListener("click", renderPost);
+    node.querySelector("#assess-next").addEventListener("click", () => {
+      // Human-review choice is offered after the result, only when HITL is on.
+      if (hitl.allowOptOut) renderHumanReview();
+      else renderPost();
+    });
+    if (a.advanced) setTimeout(launchConfetti, 250);
+    render(node);
+  }
+
+  // ---- 6b. Human-review choice (AFTER the result) ----------------------
+  function renderHumanReview() {
+    setProgress("humanreview");
+    const hitl = state.config.content.hitl[state.condition.hitl];
+    const a = state.assessment || {};
+    logEvent("human_review_prompt_shown", {});
+
+    const node = el(`<div class="card">
+      ${brandbar()}
+      <div class="hero-emoji">👤</div>
+      <h1>Would you like a human to review your application?</h1>
+      <p class="muted">You've just received your AI screening result. You can also ask a <strong>human recruiter</strong> to review your application${a.advanced ? "" : " and take another look"}. It's completely your choice.</p>
+      <div class="options">
+        <label class="option"><input type="radio" name="hr" value="yes" /> Yes, I'd like a human recruiter to review my application</label>
+        <label class="option"><input type="radio" name="hr" value="no" /> No thanks, I'm fine with the AI result</label>
+      </div>
+      <div id="hr-error" class="error-text hidden">Please choose an option.</div>
+      <div class="actions"><button class="btn-primary" id="hr-next">Continue</button></div>
+    </div>`);
+    node.querySelector("#hr-next").addEventListener("click", async () => {
+      const choice = node.querySelector('input[name="hr"]:checked');
+      if (!choice) {
+        node.querySelector("#hr-error").classList.remove("hidden");
+        return;
+      }
+      const requested = choice.value === "yes";
+      state.humanReviewRequested = requested;
+      try {
+        await api(`/api/participants/${state.participantId}/human-review`, { method: "POST", body: JSON.stringify({ requested }) });
+      } catch (e) { /* non-fatal */ }
+      renderPost();
+    });
     render(node);
   }
 
@@ -445,6 +535,7 @@
       <p class="muted small">You can now close this window.</p>
     </div>`);
     render(node);
+    launchConfetti();
     logEvent("study_completed", {});
   }
 
