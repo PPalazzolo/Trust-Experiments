@@ -200,6 +200,40 @@
     });
   }
 
+  // ---- human-in-the-loop affordances (H2) ------------------------------
+  // An explicit "opt out of the AI" button, shown before the AI screens the
+  // applicant. Resolves to true if they opt out. Only appears when hitl is on.
+  function offerOptOut(stream, hitl) {
+    return new Promise((resolve) => {
+      if (!hitl || !hitl.allowOptOut || !hitl.optOutLabel) return resolve(false);
+      const wrap = show(
+        stream,
+        `<div class="optout-box">
+          <div class="notice info">🧑‍💼 It's your choice who handles your first screening — you can opt out of the AI.</div>
+          <div class="actions">
+            <button class="btn-ghost" data-act="optout">${esc(hitl.optOutLabel)}</button>
+            <button class="btn-game mint" data-act="stay">Continue with the AI ▶</button>
+          </div>
+        </div>`
+      );
+      wrap.querySelectorAll("button").forEach((b) =>
+        b.addEventListener("click", () => {
+          wrap.querySelectorAll("button").forEach((x) => (x.disabled = true));
+          const opted = b.dataset.act === "optout";
+          logEvent("first_screening_optout", { opted });
+          resolve(opted);
+        })
+      );
+    });
+  }
+
+  // A collaborative "work with you" confirmation: the AI asks the applicant to
+  // confirm before it proceeds. Only used when hitl is on.
+  async function collabConfirm(stream, text, label) {
+    await speak(stream, text);
+    await nextButton(stream, label || "Yes, let's do it together ▶");
+  }
+
   // ---- the swipe choice card -------------------------------------------
   // Trust and hold-back options are randomly assigned to left/right on every
   // card (counterbalancing), and the side is recorded for analysis.
@@ -535,6 +569,11 @@
       if (hitl.oversightNotice) show(stream, `<div class="notice info">👩‍💼 ${esc(hitl.oversightNotice)}</div>`);
     }
 
+    const optedOut = await offerOptOut(stream, hitl);
+    if (optedOut) {
+      await speak(stream, "No problem — I'll note that you'd like a human recruiter to do your first screening. For this study, let's keep going together so you can see how I work.");
+    }
+
     const def = state.config.game.decisions.share_data;
     await speak(stream, def.prompt);
     show(
@@ -779,7 +818,16 @@
     const use = content("usefulness");
     const acc = content("accountability");
     const hitl = content("hitl");
-    await speak(stream, "Welcome to the Screening Chamber. Hold tight — I'm reviewing your application now…");
+    if (hitl.collaborativePrompts) {
+      await collabConfirm(
+        stream,
+        "Welcome to the Screening Chamber. Before I run your screening, let's do this together — I'll only go ahead when you're happy. Ready?",
+        "Yes, let's do it together ▶"
+      );
+      await speak(stream, "Great — reviewing your application now…");
+    } else {
+      await speak(stream, "Welcome to the Screening Chamber. Hold tight — I'm reviewing your application now…");
+    }
 
     const anim = show(stream, `<div class="analysing"><div class="orb">🔮</div><div class="phase" id="phase">Reading your experience…</div></div>`);
     const phases = ["Reading your experience…", "Matching your skills to the role…", "Checking your availability…", "Making a decision…"];

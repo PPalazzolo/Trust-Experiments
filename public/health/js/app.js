@@ -5,7 +5,7 @@
  *
  * Flow: title → choose avatar → player profile (pre-survey) → quest levels on a
  * map: CareCompass HQ (reputation + scenario) → Records Gate → Check-in Room →
- * Confidence Check → Analysis Lab (hoped-for advice, then the AI's advice) →
+ * Confidence Check → Analysis Lab (the AI's advice) →
  * Crossroads (only when human-in-the-loop is on) → Next Steps → Research
  * Lounge (questionnaire) → Trust Profile.
  *
@@ -27,7 +27,6 @@
     avatar: null,
     answers: {},
     assessment: null,
-    hope: null,
     levels: [],
     currentLevel: null,
     infoFlips: 0,
@@ -96,14 +95,6 @@
   }
   function extras() {
     return state.config.content.extras;
-  }
-  function shuffle(arr) {
-    const a = arr.slice();
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
   }
 
   // ---- characters ---------------------------------------------------------
@@ -215,6 +206,40 @@
         { once: true }
       );
     });
+  }
+
+  // ---- human-in-the-loop affordances (H2) ------------------------------
+  // An explicit "opt out of the AI" button, shown before the AI checks the
+  // patient. Resolves to true if they opt out. Only appears when hitl is on.
+  function offerOptOut(stream, hitl) {
+    return new Promise((resolve) => {
+      if (!hitl || !hitl.allowOptOut || !hitl.optOutLabel) return resolve(false);
+      const wrap = show(
+        stream,
+        `<div class="optout-box">
+          <div class="notice info">👩‍⚕️ It's your choice who checks your symptoms first — you can opt out of the AI.</div>
+          <div class="actions">
+            <button class="btn-ghost" data-act="optout">${esc(hitl.optOutLabel)}</button>
+            <button class="btn-game mint" data-act="stay">Continue with the AI ▶</button>
+          </div>
+        </div>`
+      );
+      wrap.querySelectorAll("button").forEach((b) =>
+        b.addEventListener("click", () => {
+          wrap.querySelectorAll("button").forEach((x) => (x.disabled = true));
+          const opted = b.dataset.act === "optout";
+          logEvent("first_screening_optout", { opted });
+          resolve(opted);
+        })
+      );
+    });
+  }
+
+  // A collaborative "work with you" confirmation: the AI asks the patient to
+  // confirm before it proceeds. Only used when hitl is on.
+  async function collabConfirm(stream, text, label) {
+    await speak(stream, text);
+    await nextButton(stream, label || "Yes, let's do it together ▶");
   }
 
   // ---- the swipe choice card -------------------------------------------
@@ -567,6 +592,11 @@
       if (hitl.oversightNotice) show(stream, `<div class="notice info">👩‍⚕️ ${esc(hitl.oversightNotice)}</div>`);
     }
 
+    const optedOut = await offerOptOut(stream, hitl);
+    if (optedOut) {
+      await speak(stream, `No problem — I'll note that you'd like a nurse at ${extras().provider} to check your symptoms first. For this study, let's keep going together so you can see how I work.`);
+    }
+
     const def = state.config.game.decisions.share_data;
     await speak(stream, def.prompt);
     show(
@@ -831,36 +861,23 @@
     advance("tokens");
   };
 
-  // ---- Level: Analysis Lab (hoped-for advice, then the advice) -------------
+  // ---- Level: Analysis Lab (the AI's advice) -------------------------------
   LEVEL_FN.chamber = async function () {
     const stream = scene("chamber");
     const use = content("usefulness");
     const acc = content("accountability");
     const hitl = content("hitl");
-    const hope = extras().hope;
 
-    await speak(stream, `Welcome to the Analysis Lab. ${hope.prompt}`);
-    const ordered = shuffle(hope.options.slice(0, 2)).concat(hope.options.slice(2));
-    const hopeWrap = show(
-      stream,
-      `<div class="hope-options" role="group" aria-label="What are you hoping the AI will say?">${ordered
-        .map((o) => `<button class="hope-opt" data-v="${o.value}"><span class="he">${o.emoji}</span>${esc(o.label)}</button>`)
-        .join("")}</div>`
-    );
-    state.hope = await new Promise((resolve) =>
-      hopeWrap.querySelectorAll(".hope-opt").forEach((b) =>
-        b.addEventListener("click", () => {
-          hopeWrap.querySelectorAll(".hope-opt").forEach((x) => {
-            x.disabled = true;
-            x.classList.toggle("selected", x === b);
-          });
-          resolve(b.dataset.v);
-        })
-      )
-    );
-    logEvent("hope_selected", { hope: state.hope, order: ordered.map((o) => o.value) });
-
-    await speak(stream, "Thanks for telling me. Hold tight — I'm going through your answers now…");
+    if (hitl.collaborativePrompts) {
+      await collabConfirm(
+        stream,
+        "Welcome to the Analysis Lab. Before I look at your answers, let's do this together — I'll only go ahead when you're happy. Ready?",
+        "Yes, let's do it together ▶"
+      );
+      await speak(stream, "Great — going through your answers now…");
+    } else {
+      await speak(stream, "Welcome to the Analysis Lab. Hold tight — I'm going through your answers now…");
+    }
     const anim = show(stream, `<div class="analysing"><div class="orb">🔬</div><div class="phase" id="phase">Reading your answers…</div></div>`);
     const phases = ["Reading your answers…", "Checking medical guidelines…", "Looking for warning signs…", "Deciding what to recommend…"];
     const duration = use.friction ? 4800 : 2600;
@@ -874,7 +891,7 @@
     let assessment = null;
     for (let attempt = 0; attempt < 3 && !assessment; attempt++) {
       try {
-        const [resp] = await Promise.all([post(pPath("interaction"), { answers: state.answers, hope: state.hope }), sleep(attempt === 0 ? duration : 800)]);
+        const [resp] = await Promise.all([post(pPath("interaction"), { answers: state.answers }), sleep(attempt === 0 ? duration : 800)]);
         assessment = resp.assessment;
       } catch (e) {
         await sleep(800);

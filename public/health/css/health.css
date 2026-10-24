@@ -80,19 +80,6 @@ body.care {
 .sev.on { border-color: var(--brand); background: var(--brand); color: #fff; }
 .sev-ends { display: flex; justify-content: space-between; max-width: 460px; font-size: 12px; font-weight: 800; color: var(--muted); margin-top: 4px; }
 
-/* Hoped-for advice */
-.hope-options { display: grid; gap: 10px; margin: 6px 0; }
-.hope-opt {
-  display: flex; align-items: center; gap: 12px; text-align: left; cursor: pointer;
-  border: 3px solid var(--line); background: #fff; border-radius: 18px; padding: 14px 16px;
-  font-family: inherit; font-size: 16px; font-weight: 800; color: var(--ink);
-  box-shadow: 0 4px 0 var(--line); transition: transform 0.15s ease;
-}
-.hope-opt:hover { transform: translateY(-2px); }
-.hope-opt .he { font-size: 26px; }
-.hope-opt.selected { border-color: var(--brand); background: var(--info-bg); box-shadow: 0 4px 0 var(--brand); }
-.hope-opt:disabled { cursor: default; }
-
 /* Booking confirmation + safety-netting */
 .booking-card {
   display: flex; gap: 14px; align-items: center; border: 3px solid #bfe9d9; background: var(--ok-bg);

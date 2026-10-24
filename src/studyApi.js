@@ -310,17 +310,25 @@ function regionFromCountry(raw) {
 // every survey item + computed scores. Robust to items being absent.
 // ---------------------------------------------------------------------------
 function toCSV(study, participants) {
-  const { FACTORS, PRE_SURVEY, POST_SURVEY, game, content } = study;
-  const hasHope = !!content.HOPE;
-  const factorCols = Object.keys(FACTORS).map((f) => `cond_${f}`);
-  const demoCols = PRE_SURVEY.items.map((i) => `pre_${i.id}`);
-  const postCols = [];
-  for (const section of POST_SURVEY.sections) {
-    for (const item of section.items) postCols.push(`post_${item.id}`);
-  }
+  const { FACTORS, PRE_SURVEY, POST_SURVEY, game, content, csvSchema } = study;
+  // Column schema. When a shared cross-study schema is supplied (see
+  // server.js), both studies export the *same* columns in the same order — so
+  // the Job Quest and Care Quest CSVs line up for a combined analysis. Columns
+  // that don't apply to a given study are emitted blank. Falls back to this
+  // study's own schema when run standalone.
+  const factorKeys = csvSchema ? csvSchema.factorKeys : Object.keys(FACTORS);
+  const preIds = csvSchema ? csvSchema.preIds : PRE_SURVEY.items.map((i) => i.id);
+  const postIds = csvSchema
+    ? csvSchema.postIds
+    : POST_SURVEY.sections.flatMap((s) => s.items.map((i) => i.id));
+  const decisionKeys = csvSchema ? csvSchema.decisionKeys : Object.keys(game.DECISIONS);
+  const hasHope = csvSchema ? csvSchema.hasHope : !!content.HOPE;
+
+  const factorCols = factorKeys.map((f) => `cond_${f}`);
+  const demoCols = preIds.map((id) => `pre_${id}`);
+  const postCols = postIds.map((id) => `post_${id}`);
   const scoreCols = ["score_trustMean"];
 
-  const decisionKeys = Object.keys(game.DECISIONS);
   const gameCols = [
     "game_avatar",
     "game_info_flips",
@@ -334,6 +342,7 @@ function toCSV(study, participants) {
 
   const header = [
     "participant_id",
+    "study",
     "created_at",
     "status",
     "assign_source",
@@ -372,17 +381,18 @@ function toCSV(study, participants) {
     const match = inter.outcomeMatchesHope;
     const row = [
       p.id,
+      study.key,
       p.created_at,
       p.status,
       p.assign_source,
-      ...Object.keys(FACTORS).map((f) => cond[f] ?? ""),
-      ...PRE_SURVEY.items.map((i) => demo[i.id] ?? ""),
+      ...factorKeys.map((f) => cond[f] ?? ""),
+      ...preIds.map((id) => demo[id] ?? ""),
       regionFromCountry(demo.country),
       inter.humanReviewRequested ? "1" : "0",
       inter.assessment ? inter.assessment.decision ?? "" : "",
       inter.assessment && inter.assessment.hallucinated ? "1" : "0",
       ...(hasHope ? [inter.hope ?? "", match === true ? "1" : match === false ? "0" : ""] : []),
-      ...postCols.map((c) => post[c.replace(/^post_/, "")] ?? ""),
+      ...postIds.map((id) => post[id] ?? ""),
       scores.trustMean ?? "",
       (g.meta && g.meta.avatar) || "",
       (g.meta && g.meta.infoFlips) ?? "",

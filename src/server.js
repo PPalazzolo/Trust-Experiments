@@ -60,6 +60,30 @@ const health = {
   adminToken: ADMIN_TOKEN,
 };
 
+// Shared CSV column schema across both studies, so the two exports have
+// identical columns (in the same order) for a combined analysis. It's the union
+// of each study's factors, survey items and game decisions; columns that don't
+// apply to a study are exported blank. Study-specific items (e.g. Care Quest's
+// health_lookup / int_follow) therefore also appear — empty — in the other
+// study's file, and every row carries a `study` column to tell them apart.
+function buildCsvSchema(studies) {
+  const addUnique = (arr, v) => {
+    if (!arr.includes(v)) arr.push(v);
+  };
+  const schema = { factorKeys: [], preIds: [], postIds: [], decisionKeys: [], hasHope: false };
+  for (const s of studies) {
+    Object.keys(s.FACTORS).forEach((f) => addUnique(schema.factorKeys, f));
+    s.PRE_SURVEY.items.forEach((i) => addUnique(schema.preIds, i.id));
+    s.POST_SURVEY.sections.forEach((sec) => sec.items.forEach((i) => addUnique(schema.postIds, i.id)));
+    Object.keys(s.game.DECISIONS).forEach((k) => addUnique(schema.decisionKeys, k));
+    if (s.content.HOPE) schema.hasHope = true;
+  }
+  return schema;
+}
+const csvSchema = buildCsvSchema([hr, health]);
+hr.csvSchema = csvSchema;
+health.csvSchema = csvSchema;
+
 const app = express();
 app.use(express.json({ limit: "256kb" }));
 app.use(express.static(PUBLIC_DIR));

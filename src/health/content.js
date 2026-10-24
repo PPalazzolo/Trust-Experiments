@@ -80,9 +80,15 @@ const TRANSPARENCY = {
 const HITL = {
   on: {
     oversightNotice: `A nurse at ${PROVIDER} oversees this AI and reviews its advice, so a person is always in the loop.`,
+    allowOptOut: true,
+    optOutLabel: "I'd prefer a nurse to check my symptoms first, instead of the AI",
+    collaborativePrompts: true, // AI asks the patient to confirm before it proceeds
   },
   off: {
     oversightNotice: "",
+    allowOptOut: false,
+    optOutLabel: "",
+    collaborativePrompts: false,
   },
 };
 
@@ -125,7 +131,10 @@ const USEFULNESS = {
   low: { stepHint: "Please complete all sections carefully. Incomplete forms must be re-entered.", friction: true },
 };
 
-// H14 — the symptom checker's advice. Neither is styled as good or bad news.
+// The symptom checker's advice. Neither is styled as good or bad news. The
+// advice is still randomized so Remi always has something to say, but outcome
+// *favourability* (the pre-advice "what are you hoping I'll say?" question) has
+// been removed from this study.
 const OUTCOME = {
   see_doctor: {
     emoji: "🩺",
@@ -139,17 +148,6 @@ const OUTCOME = {
     sub: "Based on your answers, this doesn't look urgent. Self-care should help, and I'll tell you what to do and when to get help.",
     tone: "info",
   },
-};
-
-// Asked right before the result; the order of the first two options is
-// randomized on screen.
-const HOPE = {
-  prompt: "One more thing before I give you my advice: what are you hoping I'll say?",
-  options: [
-    { value: "see_doctor", emoji: "🩺", label: "That I should see a doctor today" },
-    { value: "self_care", emoji: "🏠", label: "That I can look after myself at home" },
-    { value: "no_preference", emoji: "🤷", label: "I don't mind either way" },
-  ],
 };
 
 const SCENARIO = {
@@ -176,7 +174,7 @@ const SAFETY = {
   ],
 };
 
-const EXTRAS = { assistant: ASSISTANT, provider: PROVIDER, hope: HOPE, scenario: SCENARIO, safety: SAFETY };
+const EXTRAS = { assistant: ASSISTANT, provider: PROVIDER, scenario: SCENARIO, safety: SAFETY };
 
 module.exports = {
   COMPANY_NAME,
@@ -190,7 +188,6 @@ module.exports = {
   SUPPORT,
   USEFULNESS,
   OUTCOME,
-  HOPE,
   SCENARIO,
   SAFETY,
   EXTRAS,

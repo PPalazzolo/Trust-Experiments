@@ -3,10 +3,10 @@
  * be compared hypothesis by hypothesis), except the outcome, which is the
  * symptom checker's advice.
  *
- * H14 (outcome favourability): because neither piece of advice is obviously
- * "good news", favourability is defined per participant as whether the
- * randomized advice matches what they said they were hoping to hear just
- * before the result (see content.HOPE and interaction.outcomeMatchesHope).
+ * Outcome favourability (the H14 "what are you hoping I'll say?" manipulation)
+ * has been removed from Care Quest. The advice is still randomized so Remi
+ * always has something to recommend, but it is no longer analysed as a
+ * favourability factor and no hoped-for-advice data is collected.
  */
 
 const { FACTORS: HR_FACTORS, makeAssigner } = require("../conditions");
@@ -16,8 +16,8 @@ const FACTORS = {
   outcome: {
     levels: ["see_doctor", "self_care"],
     weights: [0.5, 0.5],
-    hypothesis: "H14",
-    label: "Symptom checker advice (favourability via hoped-for advice)",
+    hypothesis: "DV",
+    label: "Symptom checker advice (see a doctor / self-care)",
   },
 };
 
